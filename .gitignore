@@ -1,0 +1,191 @@
+# ============================================
+# IDE und Editoren
+# ============================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Arduino IDE
+*.ino.previous
+*.ino.with_bootloader
+build/
+*.elf
+*.hex
+
+# PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# ============================================
+# Python
+# ============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+
+# ============================================
+# Docker
+# ============================================
+*.log
+docker-compose.override.yml
+mosquitto/data/
+mosquitto/log/
+postgres_data
+
+# ============================================
+# SECRETS (Wichtig!)
+# ============================================
+.env
+.env.local
+.env.*.local
+secrets/
+*.key
+*.pem
+*.crt
+*.csr
+*.srl
+certs/
+!certs/.gitkeep
+mosquitto/passwd/passwd_file
+mosquitto/passwd/*.db
+mosquitto/data/
+mosquitto/log/
+
+# ============================================
+# Datenbank
+# ============================================
+
+postgres_data/
+
+# ============================================
+# Logs und Temp
+# ============================================
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
+*.tmp
+*.temp
+tmp/
+
+# ============================================
+# ESP8266 Build Artefakte
+# ============================================
+esp8266/.build/
+esp8266/build/
+*.bin
+*.d
+*.o
+*.elf 
+
+# ============================================
+# OS spezifisch
+# ============================================
+# Windows
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msm
+*.exe
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# Linux
+.directory
+*.pid
+*.seed
+*.pid.lock
+
+# ============================================
+# Backup Dateien
+# ============================================
+*.bak
+*.backup
+*.old
+*.orig
+*.rej
+
+# ============================================
+# Projekt spezifisch
+# ============================================
+# OTA Firmware
+firmware/*.bin
+firmware/*.bin.*
+
+# Bridge temporäre Dateien
+bridge/__pycache__/
+bridge/*.pyc
+
+# Provisioner
+provisioner/__pycache__/
+provisioner/*.pyc
+
+# Mosquitto Laufzeitdaten
+mosquitto/data/
+mosquitto/log/
+
+# PostgreSQL Daten (lokal)
+postgres/data/
+
+# Certs (alle ausser Platzhalter)
+certs/*.key
+certs/*.pem
+certs/*.crt
+certs/*.csr
+certs/*.srl
+!certs/.gitkeep
+
+# ============================================
+# Test und Coverage
+# ============================================
+.coverage
+.coverage.*
+.nyc_output
+*.cover
+*.py,cover
+htmlcov/
+.tox/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ============================================
+# Deployment
+# ============================================
+*.tar.gz
+*.zip
+dist/
+build/
+*.egg-info/
+.eggs/
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.history
+# IDE
+.vscode/
+# Logs
+*.log

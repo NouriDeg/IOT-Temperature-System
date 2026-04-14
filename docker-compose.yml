@@ -1,0 +1,96 @@
+services:
+  # ============================================
+  # MQTT BROKER (Eclipse Mosquitto)
+  # ============================================
+  mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: mqtt_broker
+    ports:
+      - "1883:1883"      # MQTT (intern, für Bridge/Provisioner)
+      - "8883:8883"      # MQTTS (extern, für ESP8266 mit TLS)
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/acls:/mosquitto/acls:ro
+      - ./certs:/mosquitto/certs:ro
+      - ./mosquitto/passwd:/mosquitto/passwd
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/broker/version", "-C", "1", "-W", "3"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================
+  # POSTGRESQL DATENBANK
+  # ============================================
+  postgres:
+    image: postgres:15
+    container_name: postgres_db
+    environment:
+      POSTGRES_DB: sensordb
+      POSTGRES_USER: sensor_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      TZ: UTC
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres:/docker-entrypoint-initdb.d:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sensor_user -d sensordb"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # ============================================
+  # PROVISIONING SERVICE (Geräte-Onboarding)
+  # ============================================
+  provisioner:
+    build: ./provisioner
+    container_name: provisioner_service
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      MQTT_PROVISION_USER: ${MQTT_PROVISION_USER}
+      MQTT_PROVISION_PASSWORD: ${MQTT_PROVISION_PASSWORD}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: sensordb
+      DB_USER: sensor_user
+      DB_PASSWORD: ${DB_PASSWORD}
+      MQTT_BROKER_ADDRESS: ${MQTT_BROKER_ADDRESS}
+    volumes:
+      - ./certs:/app/certs:ro
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ============================================
+  # BRIDGE SERVICE (MQTT → PostgreSQL)
+  # ============================================
+  bridge:
+    build: ./bridge
+    container_name: mqtt_bridge
+    environment:
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      MQTT_BRIDGE_USER: ${MQTT_BRIDGE_USER}
+      MQTT_BRIDGE_PASSWORD: ${MQTT_BRIDGE_PASSWORD}
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: sensordb
+      DB_USER: sensor_user
+      DB_PASSWORD: ${DB_PASSWORD}
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

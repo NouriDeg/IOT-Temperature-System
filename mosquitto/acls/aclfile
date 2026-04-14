@@ -1,0 +1,16 @@
+user bridge_user
+topic read sensor/#
+topic write sensor/#
+topic read status/#
+topic write status/#
+
+user provisioner
+topic write devices/+/provisioning/response
+topic read devices/+/provisioning/request
+
+user frontend_user
+topic read sensor/#
+topic read status/#
+
+user anonymous
+topic deny #
