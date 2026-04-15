@@ -1,0 +1,60 @@
+@startuml
+!theme plain
+title Komponenten & Schnittstellen
+
+package "Edge Layer" #LightBlue {
+    component "ESP8266\nFirmware" as ESP
+    component "MAX6675\nTreiber" as SENSOR
+    ESP --> SENSOR : "SPI (D5,D6,D8)"
+}
+
+package "Messaging Layer" #LightGreen {
+    component "MQTT Broker\n(Mosquitto)" as MQTT
+    component "TLS\nVerschlüsselung" as TLS
+    component "ACL\nZugriffskontrolle" as ACL
+    MQTT --> TLS : "Port 8883"
+    MQTT --> ACL : "aclfile"
+}
+
+package "Service Layer" #LightYellow {
+    component "Provisioning\nService" as PROV
+    component "MQTT Bridge\n(Python)" as BRIDGE
+    component "JSON Schema\nValidator" as VALIDATOR
+    component "OTA Update\nManager" as OTA
+    BRIDGE --> VALIDATOR : "validate()"
+}
+
+package "Data Layer" #LightCoral {
+    database "PostgreSQL\n15" as DB
+    component "TimescaleDB\n(optional)" as TIMESCALE
+    DB --> TIMESCALE : "Hyper Tables"
+}
+
+package "Presentation Layer" #LightPink {
+    component "Backend API\n(Flask)" as API
+    component "Web Frontend\n(HTML/JS)" as WEB
+    component "Chart.js\nVisualisierung" as CHART
+    WEB --> CHART : "Live Charts"
+}
+
+' === Schnittstellen (Interfaces) ===
+() "MQTT (1883/8883)" as MQTT_IF
+() "REST API (5000)" as API_IF
+() "SQL (5432)" as SQL_IF
+() "Provisioning" as PROV_IF
+
+' === Verbindungen ===
+ESP --> MQTT_IF : "MQTTS"
+MQTT_IF --> MQTT : "implements"
+PROV_IF --> PROV : "implements"
+API_IF --> API : "implements"
+SQL_IF --> DB : "implements"
+
+MQTT --> PROV_IF : "devices/+/provisioning"
+MQTT --> BRIDGE : "sensor/#"
+BRIDGE --> SQL_IF : "INSERT"
+API --> SQL_IF : "SELECT"
+WEB --> API_IF : "HTTP"
+API --> OTA : "Firmware Update"
+
+@enduml

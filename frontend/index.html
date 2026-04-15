@@ -1,0 +1,31 @@
+﻿<!DOCTYPE html>
+<html>
+<head>
+    <title>IoT Dashboard</title>
+    <style>
+        body { font-family: Arial; text-align: center; margin-top: 50px; }
+        .temp { font-size: 72px; color: #ff6600; }
+    </style>
+</head>
+<body>
+    <h1>🌡️ IoT Temperatur Dashboard</h1>
+    <div class="temp" id="temp">--.- °C</div>
+    <p id="timestamp"></p>
+    <script>
+        async function loadData() {
+            try {
+                const response = await fetch('/api/latest');
+                const data = await response.json();
+                if (!data.error) {
+                    document.getElementById('temp').innerHTML = data.temperature + ' °C';
+                    document.getElementById('timestamp').innerHTML = new Date(data.timestamp).toLocaleString();
+                }
+            } catch (error) {
+                console.error('Fehler:', error);
+            }
+        }
+        loadData();
+        setInterval(loadData, 5000);
+    </script>
+</body>
+</html>

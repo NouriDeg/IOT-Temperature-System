@@ -1,175 +1,310 @@
+// ============================================
+// ESP8266 MAX6675 IoT Sensor
+// Mit automatischem Provisioning, TLS, MQTT
+// Statische IP für schnelle Verbindung
+// ============================================
+// Version: 1.0.0
+// Autor: NouriDeg
+// ============================================
+
 #include <ESP8266WiFi.h>
-#include <PubSubClient.h>
-#include <max6675.h>
-#include <ArduinoJson.h>
+#include <WiFiClientSecure.h>  // Für TLS Verbindungen
+#include <PubSubClient.h>       // MQTT Client
+#include <ArduinoJson.h>        // JSON Verarbeitung
+#include <max6675.h>            // MAX6675 Sensor Treiber
+#include "provisioning.h"       // Automatisches Device Provisioning
 
-// ==========================================
-// KONFIGURATION
-// ==========================================
-const char* ssid = "Vodafone-3DDC";
-const char* password = "xske7fyNCgy7abzC";
-const char* mqtt_server = "192.168.0.126";
-const int mqtt_port = 1883;
-const char* client_id = "ESP8266_MAX6675";
+// ============================================
+// WLAN KONFIGURATION
+// ============================================
+const char* WLAN_SSID = "Vodafone-3DDC";
+const char* WLAN_PASSWORT = "xske7fyNCgy7abzC";
 
-// MAX6675 Pins
-int thermoSCK = 13;   // D7 (GPIO13)
-int thermoCS  = 15;   // D8 (GPIO15)
-int thermoSO  = 12;   // D6 (GPIO12)
+// ============================================
+// STATISCHE IP (vermeidet DHCP Probleme)
+// ============================================
+IPAddress staticIP(192, 168, 0, 200);     // Feste IP für ESP8266
+IPAddress gateway(192, 168, 0, 1);        // Router IP
+IPAddress subnet(255, 255, 255, 0);       // Subnetzmaske
+IPAddress dns(192, 168, 0, 1);            // DNS Server (Router)
 
-// Statische IP
-IPAddress staticIP(192, 168, 0, 200);
-IPAddress gateway(192, 168, 0, 1);
-IPAddress subnet(255, 255, 255, 0);
+// ============================================
+// PROVISIONING SERVICE (für ersten Start)
+// ============================================
+const char* PROVISIONING_HOST = "192.168.0.105";  // Windows IP
+const int PROVISIONING_PORT = 1883;               // MQTT Port ohne TLS
 
-MAX6675 thermocouple(thermoSCK, thermoCS, thermoSO);
-WiFiClient espClient;
-PubSubClient client(espClient);
+// ============================================
+// MAX6675 PINS (SCK an D7 = GPIO13!)
+// ============================================
+const int PIN_SCK = 13;    // D7 = GPIO13 (Clock)
+const int PIN_CS = 15;     // D8 = GPIO15 (Chip Select)
+const int PIN_SO = 12;     // D6 = GPIO12 (Data Out)
 
-// ==========================================
-// SENSOR FILTER
-// ==========================================
+// ============================================
+// TIMING EINSTELLUNGEN
+// ============================================
+const unsigned long SENSOR_INTERVAL_MS = 5000;   // Alle 5 Sekunden messen
+
+// ============================================
+// GLOBALE OBJEKTE
+// ============================================
+MAX6675 thermocouple(PIN_SCK, PIN_CS, PIN_SO);
+ProvisioningClient provisioner(PROVISIONING_HOST, PROVISIONING_PORT);
+
+// MQTT Client (wird nach Provisioning initialisiert)
+WiFiClientSecure* espClient = nullptr;
+PubSubClient* mqttClient = nullptr;
+
+// Provisionierte Credentials (vom Service erhalten)
+String mqttBroker;
+uint16_t mqttPort;
+String mqttUser;
+String mqttPassword;
+String caCert;        // CA Zertifikat für TLS
+String clientCert;    // Client Zertifikat (für mTLS)
+String clientKey;     // Client Private Key
+
+// Globale Zeiger für TLS Objekte (müssen lange leben)
+BearSSL::X509List* caCertList = nullptr;
+BearSSL::X509List* clientCertList = nullptr;
+BearSSL::PrivateKey* clientPrivKey = nullptr;
+
+// ============================================
+// SENSOR-FILTER (glättet Ausreißer)
+// ============================================
 float letzteGueltigeTemp = 25.0;
+int filterIndex = 0;
+float tempRingBuffer[5];
 
 float getFilteredTemperature() {
   float rohwert = thermocouple.readCelsius();
   
+  // Fehler: Kein Thermoelement erkannt
   if (isnan(rohwert)) {
     return letzteGueltigeTemp;
   }
   
+  // Ausreißererkennung: Sprung größer 5°C
   if (abs(rohwert - letzteGueltigeTemp) > 5.0) {
+    Serial.print(" Ausreißer ignoriert: ");
+    Serial.print(rohwert);
+    Serial.print(" °C → ");
+    Serial.print(letzteGueltigeTemp);
+    Serial.println(" °C verwendet");
     return letzteGueltigeTemp;
   }
   
-  letzteGueltigeTemp = rohwert;
-  return rohwert;
-}
-
-// ==========================================
-// FLEXIBLE JSON NACHRICHT (kompakt)
-// ==========================================
-void sendSensorData(float temperature) {
-  // Verwende StaticJsonDocument für bessere Speichereffizienz
-  StaticJsonDocument<256> doc;
+  // Ringbuffer für Mittelwertbildung
+  tempRingBuffer[filterIndex] = rohwert;
+  filterIndex = (filterIndex + 1) % 5;
   
-  doc["device_id"] = "ESP8266_MAX6675";
-  doc["device_type"] = "esp8266";
-  doc["sensor"] = "max6675";
-  doc["temp"] = temperature;
-  doc["unit"] = "celsius";
-  doc["rssi"] = WiFi.RSSI();
-  doc["heap"] = ESP.getFreeHeap();
-  doc["uptime"] = millis() / 1000;
-  
-  char buffer[256];
-  size_t len = serializeJson(doc, buffer);
-  
-  // Wichtig: Nur senden wenn verbunden
-  if (client.connected()) {
-    if (client.publish("sensor/temperatur", buffer)) {
-      Serial.print(" ");
-      Serial.println(buffer);
-    } else {
-      Serial.println(" Publish fehlgeschlagen");
+  float summe = 0.0;
+  int anzahl = 0;
+  for (int i = 0; i < 5; i++) {
+    if (tempRingBuffer[i] != 0.0) {
+      summe += tempRingBuffer[i];
+      anzahl++;
     }
   }
-}
-
-// ==========================================
-// STATUS SENDEN
-// ==========================================
-void sendStatus(const char* status) {
-  StaticJsonDocument<128> doc;
-  doc["device_id"] = "ESP8266_MAX6675";
-  doc["status"] = status;
-  doc["rssi"] = WiFi.RSSI();
   
-  char buffer[128];
-  serializeJson(doc, buffer);
-  client.publish("status/ESP8266_MAX6675", buffer, true);
+  float gemittelterWert = (anzahl > 0) ? (summe / anzahl) : rohwert;
+  
+  // Gleitender Filter (70% alt, 30% neu)
+  float gefiltert = 0.7 * letzteGueltigeTemp + 0.3 * gemittelterWert;
+  letzteGueltigeTemp = gefiltert;
+  
+  return gefiltert;
 }
 
-// ==========================================
-// WLAN
-// ==========================================
-void setup_wifi() {
-  Serial.print("Verbinde mit WLAN: ");
-  Serial.println(ssid);
-
-  WiFi.mode(WIFI_STA);
-  WiFi.config(staticIP, gateway, subnet);
-  WiFi.begin(ssid, password);
-
+// ============================================
+// WLAN MIT STATISCHER IP VERBINDEN
+// ============================================
+void connectWLAN() {
+  // Statische IP VOR dem Verbinden setzen!
+  WiFi.config(staticIP, gateway, subnet, dns);
+  
+  WiFi.begin(WLAN_SSID, WLAN_PASSWORT);
+  Serial.print("Verbinde mit WLAN");
+  
   int attempts = 0;
   while (WiFi.status() != WL_CONNECTED && attempts < 30) {
     delay(500);
     Serial.print(".");
     attempts++;
   }
-
+  
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("\n WLAN verbunden!");
-    Serial.print("IP: ");
+    Serial.print("   IP: ");
     Serial.println(WiFi.localIP());
+    Serial.print("   Gateway: ");
+    Serial.println(WiFi.gatewayIP());
+    Serial.print("   Signal (RSSI): ");
+    Serial.print(WiFi.RSSI());
+    Serial.println(" dBm");
   } else {
     Serial.println("\n WLAN Fehler! Neustart...");
+    delay(2000);
     ESP.restart();
   }
 }
 
-// ==========================================
-// MQTT mit LWT
-// ==========================================
-void reconnectMqtt() {
-  while (!client.connected()) {
-    Serial.print("Verbinde mit MQTT... ");
+// ============================================
+// MQTT VERBINDUNG (mit TLS)
+// ============================================
+void connectMQTT() {
+  if (mqttClient == nullptr) return;
+  
+  while (!mqttClient->connected()) {
+    Serial.print(" Verbinde mit MQTTS (TLS verschlüsselt)... ");
     
-    // LWT (Last Will and Testament)
-    if (client.connect(client_id, "status/ESP8266_MAX6675/will", 1, true, "offline")) {
-      Serial.println(" verbunden (mit LWT)!");
-      sendStatus("online");
+    if (mqttClient->connect("ESP8266_MAX6675", mqttUser.c_str(), mqttPassword.c_str())) {
+      Serial.println(" verbunden!");
     } else {
-      Serial.print(" rc=");
-      Serial.print(client.state());
+      Serial.print(" fehlgeschlagen, rc=");
+      Serial.print(mqttClient->state());
       Serial.println(" - Wiederhole in 5 Sekunden");
       delay(5000);
     }
   }
 }
 
-// ==========================================
-// SETUP
-// ==========================================
-void setup() {
-  Serial.begin(115200);
-  Serial.println("\n=================================");
-  Serial.println("ESP8266 MAX6675 IoT Sensor");
-  Serial.println("=================================");
+// ============================================
+// TEMPERATUR ÜBER MQTT SENDEN
+// ============================================
+void sendTemperature() {
+  if (mqttClient == nullptr || !mqttClient->connected()) return;
   
-  setup_wifi();
-  client.setServer(mqtt_server, mqtt_port);
+  float temperatur = getFilteredTemperature();
   
-  Serial.println(" System bereit!");
+  // JSON Payload erstellen
+  JsonDocument doc;
+  doc["device_id"] = "ESP8266_MAX6675";
+  doc["device_type"] = "esp8266";
+  doc["sensor"] = "max6675";
+  doc["temp"] = temperatur;
+  doc["unit"] = "celsius";
+  doc["rssi"] = WiFi.RSSI();
+  doc["heap"] = ESP.getFreeHeap();
+  doc["uptime"] = millis() / 1000;
+  
+  char buffer[256];
+  serializeJson(doc, buffer);
+  
+  if (mqttClient->publish("sensor/temperatur", buffer)) {
+    Serial.print(" ");
+    Serial.println(buffer);
+  } else {
+    Serial.println(" Fehler beim Senden");
+  }
 }
 
-// ==========================================
-// LOOP
-// ==========================================
-void loop() {
-  if (!client.connected()) {
-    reconnectMqtt();
+// ============================================
+// SETUP
+// ============================================
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  
+  Serial.println("\n=========================================");
+  Serial.println("ESP8266 MAX6675 IoT Sensor");
+  Serial.println("Mit automatischem Provisioning & TLS");
+  Serial.println("=========================================\n");
+  
+  // Ringbuffer initialisieren
+  for (int i = 0; i < 5; i++) {
+    tempRingBuffer[i] = 0.0;
   }
-  client.loop();
   
-  static unsigned long lastSensorRead = 0;
-  unsigned long now = millis();
+  // ==========================================
+  // 1. WLAN VERBINDEN
+  // ==========================================
+  connectWLAN();
   
-  if (now - lastSensorRead > 5000) {
-    lastSensorRead = now;
+  // ==========================================
+  // 2. PROVISIONING (falls nötig)
+  // ==========================================
+  if (!provisioner.isProvisioned()) {
+    Serial.println("\n Gerät nicht provisioniert. Starte Provisioning...");
     
-    float temperature = getFilteredTemperature();
-    sendSensorData(temperature);
+    if (provisioner.provision()) {
+      Serial.println(" Provisioning erfolgreich!");
+    } else {
+      Serial.println(" Provisioning fehlgeschlagen!");
+      delay(5000);
+      ESP.restart();
+      return;
+    }
+  }
+  
+  // ==========================================
+  // 3. PROVISIONIERTE CREDENTIALS LADEN
+  // ==========================================
+  provisioner.getCredentials(mqttBroker, mqttPort, mqttUser, mqttPassword, 
+                             caCert, clientCert, clientKey);
+  
+  Serial.println("\n Provisionierte Credentials:");
+  Serial.print("   Broker: ");
+  Serial.println(mqttBroker);
+  Serial.print("   Port: ");
+  Serial.println(mqttPort);
+  Serial.print("   User: ");
+  Serial.println(mqttUser);
+  Serial.print("   CA Cert Länge: ");
+  Serial.println(caCert.length());
+  
+  // ==========================================
+  // 4. TLS MIT ZERTIFIKATEN KONFIGURIEREN
+  // ==========================================
+  espClient = new WiFiClientSecure();
+  
+  if (caCert.length() > 0) {
+    // CA Zertifikat für Server-Validierung
+    caCertList = new BearSSL::X509List(caCert.c_str());
+    espClient->setTrustAnchors(caCertList);
+    Serial.println(" TLS mit CA Zertifikat aktiviert");
+  } else {
+    // Fallback: Unsicher (nur für Tests!)
+    espClient->setInsecure();
+    Serial.println(" TLS ohne Zertifikatsprüfung (unsicher!)");
+  }
+  
+  // Client Zertifikat für gegenseitige Authentifizierung (mTLS)
+  if (clientCert.length() > 0 && clientKey.length() > 0) {
+    clientCertList = new BearSSL::X509List(clientCert.c_str());
+    clientPrivKey = new BearSSL::PrivateKey(clientKey.c_str());
+    espClient->setClientRSACert(clientCertList, clientPrivKey);
+    Serial.println(" Client Zertifikat für mTLS aktiviert");
+  }
+  
+  // ==========================================
+  // 5. MQTT CLIENT INITIALISIEREN
+  // ==========================================
+  mqttClient = new PubSubClient(*espClient);
+  mqttClient->setServer(mqttBroker.c_str(), mqttPort);
+  
+  Serial.println("\n System bereit!");
+}
+
+// ============================================
+// LOOP
+// ============================================
+void loop() {
+  if (mqttClient == nullptr) {
+    delay(1000);
+    return;
+  }
+  
+  if (!mqttClient->connected()) {
+    connectMQTT();
+  }
+  mqttClient->loop();
+  
+  static unsigned long lastSensor = 0;
+  if (millis() - lastSensor > SENSOR_INTERVAL_MS) {
+    lastSensor = millis();
+    sendTemperature();
   }
   
   delay(10);
