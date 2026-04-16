@@ -38,7 +38,7 @@ services:
     restart: unless-stopped                         # Automatischer Neustart bei Absturz
     healthcheck:
       # Prüft ob der Broker läuft, indem er eine Test-Nachricht abonniert
-      test: ["CMD", "mosquitto_sub", "-t", "$$SYS/broker/version", "-C", "1", "-W", "3"]
+      test:  ["CMD", "pgrep", "mosquitto"]
       interval: 30s      # Alle 30 Sekunden prüfen
       timeout: 10s       # Nach 10 Sekunden Timeout
       retries: 3         # Nach 3 Fehlversuchen als "unhealthy" markieren

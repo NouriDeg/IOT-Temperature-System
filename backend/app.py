@@ -2,6 +2,11 @@
 """
 Backend API für IoT Temperature Monitoring System
 Mit Web Dashboard
+
+ANGEPASST für Tabellenstruktur:
+- sensor_data: value (statt temperature)
+- device_status: status, last_seen
+- devices: device_id, status, last_seen, provisioned_at
 """
 
 from flask import Flask, jsonify, request, render_template
@@ -39,12 +44,12 @@ def dashboard():
 # ==========================================
 @app.route('/api/latest')
 def get_latest():
-    """Aktuellste Temperatur"""
+    """Aktuellste Temperatur (verwendet 'value' Spalte)"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
-            SELECT device_id, temperature, unit, received_at 
+            SELECT device_id, value as temperature, unit, received_at 
             FROM sensor_data 
             ORDER BY received_at DESC 
             LIMIT 1
@@ -66,7 +71,7 @@ def get_latest():
 
 @app.route('/api/history')
 def get_history():
-    """Historische Temperaturdaten"""
+    """Historische Temperaturdaten (verwendet 'value' Spalte)"""
     hours = request.args.get('hours', 24, type=int)
     limit = request.args.get('limit', 100, type=int)
     
@@ -74,7 +79,7 @@ def get_history():
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
-            SELECT device_id, temperature, unit, received_at 
+            SELECT device_id, value as temperature, unit, received_at 
             FROM sensor_data 
             WHERE received_at > NOW() - INTERVAL '%s hours'
             ORDER BY received_at ASC
@@ -96,13 +101,13 @@ def get_history():
 
 @app.route('/api/devices')
 def get_devices():
-    """Alle registrierten Geräte"""
+    """Alle registrierten Geräte (verwendet device_status Tabelle)"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
         cur.execute("""
-            SELECT device_id, status, last_seen, provisioned_at
-            FROM devices 
+            SELECT device_id, status, last_seen, updated_at as last_update
+            FROM device_status 
             ORDER BY last_seen DESC NULLS LAST
         """)
         rows = cur.fetchall()
@@ -113,14 +118,14 @@ def get_devices():
             'device_id': row['device_id'],
             'status': row['status'],
             'last_seen': row['last_seen'].isoformat() if row['last_seen'] else None,
-            'provisioned_at': row['provisioned_at'].isoformat() if row['provisioned_at'] else None
+            'last_update': row['last_update'].isoformat() if row['last_update'] else None
         } for row in rows])
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/stats')
 def get_stats():
-    """Statistiken (Min, Max, Avg)"""
+    """Statistiken (Min, Max, Avg) - verwendet 'value' Spalte"""
     hours = request.args.get('hours', 24, type=int)
     
     try:
@@ -128,9 +133,9 @@ def get_stats():
         cur = conn.cursor()
         cur.execute("""
             SELECT 
-                MIN(temperature) as min_temp,
-                MAX(temperature) as max_temp,
-                AVG(temperature) as avg_temp,
+                MIN(value) as min_temp,
+                MAX(value) as max_temp,
+                AVG(value) as avg_temp,
                 COUNT(*) as count
             FROM sensor_data 
             WHERE received_at > NOW() - INTERVAL '%s hours'
@@ -147,6 +152,19 @@ def get_stats():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/health')
+def health():
+    """Health Check Endpoint"""
+    try:
+        conn = get_db_connection()
+        cur = conn.cursor()
+        cur.execute("SELECT 1")
+        cur.close()
+        conn.close()
+        return jsonify({'status': 'healthy', 'database': 'connected'})
+    except Exception as e:
+        return jsonify({'status': 'unhealthy', 'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=5000, debug=False)

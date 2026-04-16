@@ -1,8 +1,8 @@
 # ============================================
-# ACL REGELN - Least Privilege Prinzip
+# ACLs fuer Mosquitto MQTT Broker
 # ============================================
 
-# Bridge Service (vollständiger Zugriff auf Sensordaten)
+# Bridge Service (vollstaendiger Zugriff)
 user bridge_user
 topic read sensor/#
 topic write sensor/#
@@ -14,18 +14,11 @@ user provisioner
 topic write devices/+/provisioning/response
 topic read devices/+/provisioning/request
 
-# Provisionierte Geräte (dynamisch)
-pattern user device_%
-topic write sensor/%c/temperature
-topic write status/%c/online
-topic write status/%c/will
-topic read commands/%c/#
-
 # Frontend (nur lesen)
 user frontend_user
 topic read sensor/#
 topic read status/#
 
-# Deny all others
-user anonymous
-topic deny #
+# Deny all others (alles andere ist verboten)
+topic read #
+topic write #

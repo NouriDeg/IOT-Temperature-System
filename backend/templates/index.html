@@ -1,104 +1,158 @@
-<!-- backend/templates/index.html -->
 <!DOCTYPE html>
-<html lang="de">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>IoT Temperatur Dashboard</title>
+    <title>IoT Dashboard - Backend</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: 'Segoe UI', Arial, sans-serif; background: #f0f2f5; padding: 20px; }
-        .container { max-width: 1200px; margin: 0 auto; }
-        h1 { text-align: center; color: #1a1a2e; margin-bottom: 20px; }
-        .current-temp { text-align: center; font-size: 48px; font-weight: bold; color: #ff6600; margin-bottom: 30px; }
-        .chart-container { background: white; border-radius: 15px; padding: 20px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
-        .refresh-btn { display: block; margin: 20px auto; padding: 10px 20px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; }
-        .refresh-btn:hover { background: #5a67d8; }
-        .status { text-align: center; margin-top: 20px; color: #666; }
-        .online { color: #4caf50; font-weight: bold; }
+        body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a2e; color: white; }
+        .container { max-width: 1200px; margin: auto; }
+        .card { background: #16213e; padding: 20px; border-radius: 10px; margin: 10px; }
+        .temp-big { font-size: 48px; font-weight: bold; color: #e94560; }
+        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+        canvas { max-height: 400px; width: 100%; }
+        .device-list { max-height: 200px; overflow-y: auto; }
+        .online { color: #4CAF50; }
+        .offline { color: #f44336; }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>🌡️ IoT Temperatur Dashboard</h1>
-        <div class="current-temp">
-            Aktuelle Temperatur: <span id="currentTemp">--.-</span> °C
+        <h1>🌡️ IoT Temperature Monitoring System</h1>
+        
+        <div class="grid">
+            <div class="card">
+                <h3>Aktuelle Temperatur</h3>
+                <div class="temp-big" id="current-temp">--.- °C</div>
+                <div id="current-device"></div>
+                <div id="current-time"></div>
+            </div>
+            <div class="card">
+                <h3>Statistik (letzte 24h)</h3>
+                <div>Min: <span id="min-temp">--</span> °C</div>
+                <div>Max: <span id="max-temp">--</span> °C</div>
+                <div>Durchschnitt: <span id="avg-temp">--</span> °C</div>
+                <div>Messungen: <span id="count">--</span></div>
+            </div>
+            <div class="card">
+                <h3>Geräte Status</h3>
+                <div class="device-list" id="devices-list">Wird geladen...</div>
+            </div>
         </div>
-        <div class="chart-container">
-            <canvas id="tempChart" width="800" height="400"></canvas>
-        </div>
-        <button class="refresh-btn" onclick="loadData()"> Aktualisieren</button>
-        <div class="status">
-            Status: <span id="status" class="online"> Live</span>
+        
+        <div class="card">
+            <h3>Temperaturverlauf (letzte 24h)</h3>
+            <canvas id="tempChart"></canvas>
         </div>
     </div>
 
     <script>
         let chart;
         
-        async function loadData() {
+        async function fetchLatest() {
             try {
-                // 1. Aktuelle Temperatur laden
-                const latestRes = await fetch('/api/latest');
-                const latest = await latestRes.json();
-                if (!latest.error) {
-                    document.getElementById('currentTemp').innerHTML = latest.temperature.toFixed(1);
-                }
-                
-                // 2. Historie laden (letzte 24 Stunden)
-                const historyRes = await fetch('/api/history?hours=24&limit=100');
-                const history = await historyRes.json();
-                
-                if (history.length > 0) {
-                    // Daten für Chart aufbereiten
-                    const labels = history.map(d => new Date(d.timestamp).toLocaleTimeString());
-                    const temps = history.map(d => d.temperature);
-                    
-                    // Chart aktualisieren oder erstellen
-                    if (chart) {
-                        chart.data.labels = labels.reverse();
-                        chart.data.datasets[0].data = temps.reverse();
-                        chart.update();
-                    } else {
-                        const ctx = document.getElementById('tempChart').getContext('2d');
-                        chart = new Chart(ctx, {
-                            type: 'line',
-                            data: {
-                                labels: labels.reverse(),
-                                datasets: [{
-                                    label: 'Temperatur (°C)',
-                                    data: temps.reverse(),
-                                    borderColor: '#ff6600',
-                                    backgroundColor: 'rgba(255, 102, 0, 0.1)',
-                                    fill: true,
-                                    tension: 0.3
-                                }]
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: true,
-                                plugins: {
-                                    legend: { position: 'top' },
-                                    tooltip: { callbacks: { label: (ctx) => `${ctx.raw} °C` } }
-                                },
-                                scales: {
-                                    y: { title: { display: true, text: 'Temperatur (°C)' }, min: 15, max: 35 },
-                                    x: { title: { display: true, text: 'Uhrzeit' }, ticks: { maxRotation: 45, autoSkip: true, maxTicksLimit: 10 } }
-                                }
-                            }
-                        });
-                    }
-                    document.getElementById('status').innerHTML = ' Live - Letzte Aktualisierung: ' + new Date().toLocaleTimeString();
+                const res = await fetch('/api/latest');
+                const data = await res.json();
+                if (!data.error) {
+                    document.getElementById('current-temp').innerHTML = data.temperature + ' °C';
+                    document.getElementById('current-device').innerHTML = 'Gerät: ' + data.device_id;
+                    document.getElementById('current-time').innerHTML = new Date(data.timestamp).toLocaleString();
                 }
             } catch (error) {
-                console.error('Fehler:', error);
-                document.getElementById('status').innerHTML = ' Verbindungsfehler';
+                console.error('Fehler beim Laden der aktuellen Temperatur:', error);
             }
         }
         
-        loadData();
-        setInterval(loadData, 10000);
+        async function fetchStats() {
+            try {
+                const res = await fetch('/api/stats?hours=24');
+                const data = await res.json();
+                if (!data.error) {
+                    document.getElementById('min-temp').innerHTML = data.min_temp?.toFixed(2) || '--';
+                    document.getElementById('max-temp').innerHTML = data.max_temp?.toFixed(2) || '--';
+                    document.getElementById('avg-temp').innerHTML = data.avg_temp?.toFixed(2) || '--';
+                    document.getElementById('count').innerHTML = data.count || 0;
+                }
+            } catch (error) {
+                console.error('Fehler beim Laden der Statistiken:', error);
+            }
+        }
+        
+        async function fetchDevices() {
+            try {
+                const res = await fetch('/api/devices');
+                const data = await res.json();
+                if (!data.error && data.length > 0) {
+                    let html = '';
+                    data.forEach(d => {
+                        const statusClass = d.status === 'online' ? 'online' : 'offline';
+                        html += `<div>
+                            <strong>${d.device_id}</strong><br>
+                            Status: <span class="${statusClass}">${d.status}</span><br>
+                            Letzte Nachricht: ${new Date(d.last_seen).toLocaleString()}
+                        </div><hr>`;
+                    });
+                    document.getElementById('devices-list').innerHTML = html;
+                } else {
+                    document.getElementById('devices-list').innerHTML = 'Keine Geräte gefunden';
+                }
+            } catch (error) {
+                console.error('Fehler beim Laden der Geräte:', error);
+            }
+        }
+        
+        async function fetchHistory() {
+            try {
+                const res = await fetch('/api/history?hours=24&limit=200');
+                const data = await res.json();
+                if (!data.error && data.length > 0) {
+                    const times = data.map(d => new Date(d.timestamp).toLocaleTimeString());
+                    const temps = data.map(d => d.temperature);
+                    
+                    if (chart) chart.destroy();
+                    const ctx = document.getElementById('tempChart').getContext('2d');
+                    chart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: times,
+                            datasets: [{
+                                label: 'Temperatur (°C)',
+                                data: temps,
+                                borderColor: '#e94560',
+                                backgroundColor: 'rgba(233, 69, 96, 0.1)',
+                                fill: true
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: true,
+                            plugins: {
+                                legend: { labels: { color: 'white' } }
+                            },
+                            scales: {
+                                x: { ticks: { color: 'white' } },
+                                y: { ticks: { color: 'white' } }
+                            }
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error('Fehler beim Laden des Verlaufs:', error);
+            }
+        }
+        
+        // Alle 10 Sekunden aktualisieren
+        setInterval(() => {
+            fetchLatest();
+            fetchStats();
+            fetchDevices();
+            fetchHistory();
+        }, 10000);
+        
+        // Initial laden
+        fetchLatest();
+        fetchStats();
+        fetchDevices();
+        fetchHistory();
     </script>
 </body>
 </html>

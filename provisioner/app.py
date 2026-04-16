@@ -8,27 +8,31 @@ Dieser Service:
 3. Erstellt TLS Zertifikate für sichere Kommunikation
 4. Speichert Geräteinformationen in PostgreSQL
 5. Sendet die Credentials zurück an das Gerät
+
+Topics (vereinfacht):
+- Request: provisioning/request
+- Response: provisioning/response
 """
 
 # ============================================
 # IMPORTS
 # ============================================
-import paho.mqtt.client as mqtt      # MQTT Kommunikation
-import psycopg2                       # PostgreSQL Datenbank
-import json                           # JSON Verarbeitung
-import os                             # Umgebungsvariablen
-import logging                        # Logging
-import secrets                        # Sichere Passwortgenerierung
-import string                         # Zeichensätze für Passwörter
-import hashlib                        # Passwort Hashing
-from datetime import datetime, timedelta  # Zeitstempel und timedelta für Zertifikate
-import time                           # Zeitfunktionen
-from cryptography.hazmat.primitives import serialization  # Zertifikatsverarbeitung
-from cryptography.hazmat.primitives.asymmetric import rsa  # RSA Schlüssel
-from cryptography import x509          # X.509 Zertifikate
-from cryptography.x509.oid import NameOID  # X.509 Namen
-from cryptography.hazmat.primitives import hashes  # Hash Funktionen
-from dotenv import load_dotenv        # .env Datei laden
+import paho.mqtt.client as mqtt
+import psycopg2
+import json
+import os
+import logging
+import secrets
+import string
+import hashlib
+from datetime import datetime, timedelta
+import time
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography import x509
+from cryptography.x509.oid import NameOID
+from cryptography.hazmat.primitives import hashes
+from dotenv import load_dotenv
 
 # Umgebungsvariablen aus .env laden
 load_dotenv()
@@ -37,22 +41,22 @@ load_dotenv()
 # KONFIGURATION (aus Umgebungsvariablen)
 # ============================================
 
-# MQTT Konfiguration (für Provisioning Kommunikation)
-MQTT_HOST = os.getenv('MQTT_HOST', 'mosquitto')                    # MQTT Broker Hostname
-MQTT_PORT = int(os.getenv('MQTT_PORT', 1883))                      # MQTT Port (1883 = ohne TLS)
-MQTT_PROVISION_USER = os.getenv('MQTT_PROVISION_USER', 'provisioner')  # MQTT Benutzername
-MQTT_PROVISION_PASSWORD = os.getenv('MQTT_PROVISION_PASSWORD', '')      # MQTT Passwort
+# MQTT Konfiguration
+MQTT_HOST = os.getenv('MQTT_HOST', 'mosquitto')
+MQTT_PORT = int(os.getenv('MQTT_PORT', 1883))
+MQTT_PROVISION_USER = os.getenv('MQTT_PROVISION_USER', 'provisioner')
+MQTT_PROVISION_PASSWORD = os.getenv('MQTT_PROVISION_PASSWORD', '')
 
 # PostgreSQL Konfiguration
-DB_HOST = os.getenv('DB_HOST', 'postgres')                         # Datenbank Host
-DB_PORT = int(os.getenv('DB_PORT', 5432))                          # Datenbank Port
-DB_NAME = os.getenv('DB_NAME', 'sensordb')                         # Datenbank Name
-DB_USER = os.getenv('DB_USER', 'sensor_user')                      # Datenbank Benutzer
-DB_PASSWORD = os.getenv('DB_PASSWORD', '')                         # Datenbank Passwort
+DB_HOST = os.getenv('DB_HOST', 'postgres')
+DB_PORT = int(os.getenv('DB_PORT', 5432))
+DB_NAME = os.getenv('DB_NAME', 'sensordb')
+DB_USER = os.getenv('DB_USER', 'sensor_user')
+DB_PASSWORD = os.getenv('DB_PASSWORD', '')
 
-# MQTT Broker Adresse (für die Geräte, muss von außen erreichbar sein!)
-MQTT_BROKER_ADDRESS = os.getenv('MQTT_BROKER_ADDRESS', '192.168.1.100')
-CERT_DIR = '/app/certs'  # Verzeichnis mit CA Zertifikaten
+# MQTT Broker Adresse (für die Geräte)
+MQTT_BROKER_ADDRESS = os.getenv('MQTT_BROKER_ADDRESS', '192.168.0.105')
+CERT_DIR = '/app/certs'
 
 # ============================================
 # LOGGING KONFIGURATION
@@ -167,7 +171,7 @@ class CertificateManager:
             .public_key(csr.public_key())
             .serial_number(x509.random_serial_number())
             .not_valid_before(datetime.utcnow())
-            .not_valid_after(datetime.utcnow() + timedelta(days=365))  # ← timedelta hier!
+            .not_valid_after(datetime.utcnow() + timedelta(days=365))
             .add_extension(x509.BasicConstraints(ca=False, path_length=None), critical=True)
             .sign(self.ca_key, hashes.SHA256())
         )
@@ -221,51 +225,89 @@ class ProvisioningService:
         """Callback wenn MQTT Verbindung hergestellt wurde"""
         if rc == 0:
             logger.info(" MQTT verbunden")
-            # Abonniere Provisioning Requests von allen Geräten
-            client.subscribe("devices/+/provisioning/request")
+            # Abonniere das vereinfachte Provisioning Topic
+            client.subscribe("provisioning/request")
+            logger.info("   Abonniert: provisioning/request")
         else:
             logger.error(f" MQTT Fehler: {rc}")
 
     def on_message(self, client, userdata, msg):
-        """Callback wenn eine MQTT Nachricht empfangen wird"""
+        """
+        Callback wenn eine MQTT Nachricht empfangen wird
+        Verarbeitet Provisioning Requests von ESP8266 Geräten
+        """
+        device_id = None
+        
         try:
+            # JSON Payload parsen
             payload = json.loads(msg.payload.decode())
-            device_id = msg.topic.split('/')[1]
+            device_id = payload.get('device_id')
             mac_address = payload.get('mac_address')
+            firmware_version = payload.get('firmware_version', 'unknown')
 
             logger.info(f" Provisioning Request von {device_id} (MAC: {mac_address})")
 
-            # Prüfe ob Gerät bereits existiert
+            # ==========================================
+            # 1. PRÜFE OB GERÄT BEREITS EXISTIERT
+            # ==========================================
             existing = self.db.device_exists(mac_address)
             if existing:
                 logger.info(f" Bekanntes Gerät: {existing[0]}")
                 self.send_response(device_id, status="already_provisioned")
                 return
 
-            # Generiere neue Credentials
+            # ==========================================
+            # 2. GENERIERE NEUE CREDENTIALS
+            # ==========================================
             mqtt_password = self.generate_mqtt_password()
-            mqtt_username = f"device_{device_id[:16]}"
+            mqtt_username = f"device_{device_id[:16]}" if device_id else f"device_{mac_address[:16]}"
             password_hash = self.hash_password(mqtt_password)
 
-            # Generiere TLS Zertifikate
-            private_key, cert = self.cert_manager.generate_client_certificate(device_id, mac_address)
-            certs = self.cert_manager.format_certificates(private_key, cert)
+            # ==========================================
+            # 3. GENERIERE TLS ZERTIFIKATE (optional)
+            # ==========================================
+            certs = None
+            try:
+                private_key, cert = self.cert_manager.generate_client_certificate(device_id, mac_address)
+                certs = self.cert_manager.format_certificates(private_key, cert)
+            except Exception as e:
+                logger.warning(f"Zertifikatsgenerierung fehlgeschlagen: {e}")
 
-            # In Datenbank speichern
+            # ==========================================
+            # 4. IN DATENBANK SPEICHERN
+            # ==========================================
             self.db.register_device(device_id, mac_address, mqtt_username, password_hash)
 
-            # Sende Response an das Gerät
+            # ==========================================
+            # 5. RESPONSE MIT CREDENTIALS SENDEN
+            # ==========================================
             self.send_response(device_id, status="success", mqtt_username=mqtt_username,
                                mqtt_password=mqtt_password, certificates=certs)
             logger.info(f" Gerät {device_id} erfolgreich provisioniert")
 
+        except json.JSONDecodeError as e:
+            logger.error(f" JSON Parse Fehler: {e}")
+            if device_id:
+                self.send_response(device_id, status="error", message=f"Invalid JSON: {e}")
+                
         except Exception as e:
             logger.error(f" Provisioning Fehler: {e}")
-            self.send_response(device_id, status="error", message=str(e))
+            if device_id:
+                self.send_response(device_id, status="error", message=str(e))
 
     def send_response(self, device_id, status, mqtt_username=None, mqtt_password=None,
                       certificates=None, message=None):
-        """Sendet die Provisioning Response an das Gerät"""
+        """
+        Sendet die Provisioning Response an das Gerät
+        
+        Args:
+            device_id: Eindeutige Geräte-ID
+            status: "success", "error", oder "already_provisioned"
+            mqtt_username: Generierter MQTT Benutzername (nur bei success)
+            mqtt_password: Generiertes MQTT Passwort (nur bei success)
+            certificates: TLS Zertifikate (optional)
+            message: Fehlermeldung (nur bei error)
+        """
         response = {"status": status}
         
         if mqtt_username:
@@ -280,7 +322,8 @@ class ProvisioningService:
         if message:
             response["message"] = message
 
-        topic = f"devices/{device_id}/provisioning/response"
+        # Vereinfachtes Response Topic (ohne device_id)
+        topic = "provisioning/response"
         self.mqtt_client.publish(topic, json.dumps(response))
         logger.info(f" Response gesendet an {topic}")
 
@@ -295,3 +338,7 @@ if __name__ == "__main__":
             time.sleep(1)
     except KeyboardInterrupt:
         logger.info(" Provisioning Service gestoppt")
+
+
+
+
