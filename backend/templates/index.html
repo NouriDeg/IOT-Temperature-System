@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>IoT Dashboard - Backend</title>
+    <title>IoT Dashboard - Berlin Zeit</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a2e; color: white; }
@@ -13,18 +13,20 @@
         .device-list { max-height: 200px; overflow-y: auto; }
         .online { color: #4CAF50; }
         .offline { color: #f44336; }
+        .timestamp { color: #888; font-size: 12px; }
     </style>
 </head>
 <body>
     <div class="container">
         <h1>🌡️ IoT Temperature Monitoring System</h1>
+        <p class="timestamp">Zeitzone: Europe/Berlin (CET/CEST)</p>
         
         <div class="grid">
             <div class="card">
                 <h3>Aktuelle Temperatur</h3>
                 <div class="temp-big" id="current-temp">--.- °C</div>
                 <div id="current-device"></div>
-                <div id="current-time"></div>
+                <div id="current-time" class="timestamp"></div>
             </div>
             <div class="card">
                 <h3>Statistik (letzte 24h)</h3>
@@ -55,10 +57,10 @@
                 if (!data.error) {
                     document.getElementById('current-temp').innerHTML = data.temperature + ' °C';
                     document.getElementById('current-device').innerHTML = 'Gerät: ' + data.device_id;
-                    document.getElementById('current-time').innerHTML = new Date(data.timestamp).toLocaleString();
+                    document.getElementById('current-time').innerHTML = 'Letzte Messung: ' + data.timestamp;
                 }
             } catch (error) {
-                console.error('Fehler beim Laden der aktuellen Temperatur:', error);
+                console.error('Fehler:', error);
             }
         }
         
@@ -73,7 +75,7 @@
                     document.getElementById('count').innerHTML = data.count || 0;
                 }
             } catch (error) {
-                console.error('Fehler beim Laden der Statistiken:', error);
+                console.error('Fehler:', error);
             }
         }
         
@@ -88,7 +90,7 @@
                         html += `<div>
                             <strong>${d.device_id}</strong><br>
                             Status: <span class="${statusClass}">${d.status}</span><br>
-                            Letzte Nachricht: ${new Date(d.last_seen).toLocaleString()}
+                            Letzte Nachricht: ${d.last_seen || 'never'}
                         </div><hr>`;
                     });
                     document.getElementById('devices-list').innerHTML = html;
@@ -96,7 +98,7 @@
                     document.getElementById('devices-list').innerHTML = 'Keine Geräte gefunden';
                 }
             } catch (error) {
-                console.error('Fehler beim Laden der Geräte:', error);
+                console.error('Fehler:', error);
             }
         }
         
@@ -105,7 +107,10 @@
                 const res = await fetch('/api/history?hours=24&limit=200');
                 const data = await res.json();
                 if (!data.error && data.length > 0) {
-                    const times = data.map(d => new Date(d.timestamp).toLocaleTimeString());
+                    const times = data.map(d => {
+                        const parts = d.timestamp.split(' ');
+                        return parts[1]; // Nur Uhrzeit für X-Achse
+                    });
                     const temps = data.map(d => d.temperature);
                     
                     if (chart) chart.destroy();
@@ -129,14 +134,14 @@
                                 legend: { labels: { color: 'white' } }
                             },
                             scales: {
-                                x: { ticks: { color: 'white' } },
+                                x: { ticks: { color: 'white', maxRotation: 45, minRotation: 45 } },
                                 y: { ticks: { color: 'white' } }
                             }
                         }
                     });
                 }
             } catch (error) {
-                console.error('Fehler beim Laden des Verlaufs:', error);
+                console.error('Fehler:', error);
             }
         }
         

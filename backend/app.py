@@ -1,12 +1,7 @@
 #!/usr/bin/env python
 """
 Backend API für IoT Temperature Monitoring System
-Mit Web Dashboard
-
-ANGEPASST für Tabellenstruktur:
-- sensor_data: value (statt temperature)
-- device_status: status, last_seen
-- devices: device_id, status, last_seen, provisioned_at
+Mit Web Dashboard - ZEITZONE: Europe/Berlin (CET/UTC+1, CEST/UTC+2)
 """
 
 from flask import Flask, jsonify, request, render_template
@@ -15,9 +10,15 @@ import psycopg2
 import psycopg2.extras
 import os
 from datetime import datetime, timedelta
+import pytz
 
 app = Flask(__name__)
 CORS(app)
+
+# ==========================================
+# ZEITZONE KONFIGURATION (Berlin)
+# ==========================================
+LOCAL_TZ = pytz.timezone('Europe/Berlin')  # CET/CEST
 
 # PostgreSQL Konfiguration
 DB_CONFIG = {
@@ -30,6 +31,21 @@ DB_CONFIG = {
 
 def get_db_connection():
     return psycopg2.connect(**DB_CONFIG)
+
+def to_local_time(utc_time):
+    """Konvertiert UTC Zeit in lokale Berliner Zeit"""
+    if utc_time is None:
+        return None
+    # Falls das datetime object naive ist (keine Zeitzone), füge UTC hinzu
+    if utc_time.tzinfo is None:
+        utc_time = pytz.UTC.localize(utc_time)
+    # Konvertiere nach Europe/Berlin
+    local_time = utc_time.astimezone(LOCAL_TZ)
+    return local_time
+
+def get_local_now():
+    """Gibt die aktuelle lokale Zeit in Berlin zurück"""
+    return datetime.now(LOCAL_TZ)
 
 # ==========================================
 # WEB DASHBOARD
@@ -44,7 +60,7 @@ def dashboard():
 # ==========================================
 @app.route('/api/latest')
 def get_latest():
-    """Aktuellste Temperatur (verwendet 'value' Spalte)"""
+    """Aktuellste Temperatur mit lokaler Berliner Zeit"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -59,11 +75,13 @@ def get_latest():
         conn.close()
         
         if row:
+            local_time = to_local_time(row['received_at'])
             return jsonify({
                 'device_id': row['device_id'],
                 'temperature': float(row['temperature']),
                 'unit': row['unit'],
-                'timestamp': row['received_at'].isoformat()
+                'timestamp': local_time.strftime('%Y-%m-%d %H:%M:%S'),
+                'timezone': 'Europe/Berlin'
             })
         return jsonify({'error': 'Keine Daten'}), 404
     except Exception as e:
@@ -71,9 +89,9 @@ def get_latest():
 
 @app.route('/api/history')
 def get_history():
-    """Historische Temperaturdaten (verwendet 'value' Spalte)"""
+    """Historische Temperaturdaten mit lokaler Berliner Zeit"""
     hours = request.args.get('hours', 24, type=int)
-    limit = request.args.get('limit', 100, type=int)
+    limit = request.args.get('limit', 200, type=int)
     
     try:
         conn = get_db_connection()
@@ -94,14 +112,14 @@ def get_history():
             'device_id': row['device_id'],
             'temperature': float(row['temperature']),
             'unit': row['unit'],
-            'timestamp': row['received_at'].isoformat()
+            'timestamp': to_local_time(row['received_at']).strftime('%Y-%m-%d %H:%M:%S')
         } for row in rows])
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/devices')
 def get_devices():
-    """Alle registrierten Geräte (verwendet device_status Tabelle)"""
+    """Alle registrierten Geräte mit lokaler Berliner Zeit"""
     try:
         conn = get_db_connection()
         cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -117,15 +135,15 @@ def get_devices():
         return jsonify([{
             'device_id': row['device_id'],
             'status': row['status'],
-            'last_seen': row['last_seen'].isoformat() if row['last_seen'] else None,
-            'last_update': row['last_update'].isoformat() if row['last_update'] else None
+            'last_seen': to_local_time(row['last_seen']).strftime('%Y-%m-%d %H:%M:%S') if row['last_seen'] else None,
+            'last_update': to_local_time(row['last_update']).strftime('%Y-%m-%d %H:%M:%S') if row['last_update'] else None
         } for row in rows])
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/stats')
 def get_stats():
-    """Statistiken (Min, Max, Avg) - verwendet 'value' Spalte"""
+    """Statistiken (Min, Max, Avg) für lokale Zeit"""
     hours = request.args.get('hours', 24, type=int)
     
     try:
@@ -162,7 +180,12 @@ def health():
         cur.execute("SELECT 1")
         cur.close()
         conn.close()
-        return jsonify({'status': 'healthy', 'database': 'connected'})
+        return jsonify({
+            'status': 'healthy', 
+            'database': 'connected',
+            'timezone': 'Europe/Berlin',
+            'server_time': get_local_now().strftime('%Y-%m-%d %H:%M:%S')
+        })
     except Exception as e:
         return jsonify({'status': 'unhealthy', 'error': str(e)}), 500
 
