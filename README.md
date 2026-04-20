@@ -33,160 +33,36 @@ Das System ermöglicht die automatische Erfassung, Übertragung und Visualisieru
 
 ### Komponentendiagramm
 
-```plantuml
-@startuml
-!theme plain
-skinparam componentStyle rectangle
-skinparam backgroundColor #1a1a2e
-skinparam componentBackground #16213e
-skinparam componentBorderColor #e94560
-skinparam fontColor white
-skinparam arrowColor #e94560
+## 📊 Systemarchitektur
 
-title IoT Temperature Monitoring System - Komponenten & Schnittstellen
+<div align="center">
+    <img src="docs/Architektur_UML/images/Architektur_Diagramm-IoT_Temperature_Monitoring_System___Architektur.png" alt="Systemarchitektur" width="90%">
+    <p><em>Überblick über die gesamte Systemarchitektur</em></p>
+</div>
 
-' === EDGE LAYER ===
-package "Edge Layer" {
-    component "ESP8266 Firmware" as ESP
-    component "MAX6675 Treiber" as MAX
-    component "MQTTs Client" as MQTT_CLIENT
-    note right of ESP : C++/Arduino\nWiFiClientSecure\nPubSubClient
-}
+## 🔌 Komponenten & Schnittstellen
 
-' === MESSAGING LAYER ===
-package "Messaging Layer" {
-    component "MQTT Broker\n(Mosquitto)" as BROKER
-    database "Passwd File" as PASSWD
-    file "ACL" as ACL
-    note right of BROKER : Port 1883 (anonym)\nPort 8883 (TLS)
-}
+<div align="center">
+    <img src="docs/Architektur_UML/images/Komponentdiagramm-IoT_Temperature_Monitoring_System___Komponenten___Schnittstellen.png" alt="Komponentendiagramm" width="90%">
+    <p><em>Detaillierte Komponenten mit allen Schnittstellen</em></p>
+</div>
 
-' === SERVICE LAYER ===
-package "Service Layer" {
-    component "Provisioning Service\n(Python)" as PROV
-    component "MQTT Bridge\n(Python)" as BRIDGE
-    component "Backend API\n(Flask)" as BACKEND
-    component "JSON Schema\nValidator" as VALIDATOR
-    note right of BRIDGE : MQTT → PostgreSQL\nJSON Validierung
-}
+## 🐳 Docker Deployment
 
-' === PRESENTATION LAYER ===
-package "Presentation Layer" {
-    component "Web Frontend\n(Nginx)" as FRONTEND
-    component "Chart.js\nVisualisierung" as CHART
-    component "REST API\nEndpoints" as REST
-}
+<div align="center">
+    <img src="docs/Architektur_UML/images/Deployment Diagramm-Docker_Container_Deployment.png" alt="Deployment Diagramm" width="90%">
+    <p><em>Container-Deployment mit Netzwerkverbindungen</em></p>
+</div>
 
-' === DATA LAYER ===
-package "Data Layer" {
-    database "PostgreSQL 15" as DB
-    component "TimescaleDB\n(optional)" as TIMESCALE
-    note right of DB : Tabellen:\n- sensor_data\n- device_status\n- devices
-}
+## Sequenzdiagramm
 
-' === VERBINDUNGEN ===
-ESP -down-> MAX : SPI\n(D5, D6, D8)
-ESP -down-> MQTT_CLIENT : MQTTs\n(JSON Payload)
-MQTT_CLIENT -right-> BROKER : TLS/8883
+<div align="center">
+    <img src="docs/Architektur_UML/images/Sequence_Diagramm-IoT_Temperature_Monitoring_System___Sequence_Diagramm.png" alt="Komponentendiagramm" width="90%">
+    <p><em>Sequenzdiagramm mit allen Schnittstellen</em></p>
+</div>
 
-BROKER -down-> PROV : MQTT/1883\ndevices/+/provisioning/request
-BROKER -down-> BRIDGE : MQTT/1883\nsensor/temperatur
+## Technologie-Stack
 
-PROV -down-> DB : SQL/5432\nINSERT devices
-BRIDGE -down-> DB : SQL/5432\nINSERT sensor_data
-
-BACKEND -down-> DB : SQL/5432\nSELECT sensor_data
-BACKEND -right-> REST : HTTP/5000\nJSON Responses
-REST -up-> CHART : Chart.js\nData Binding
-
-FRONTEND -up-> BACKEND : HTTP/8080 → 5000\nAPI Calls
-
-BROKER -right-> PASSWD : Auth
-BROKER -right-> ACL : ACLs
-DB -right-> TIMESCALE : Extension
-
-@enduml
-
-
-
-@startuml
-!theme plain
-skinparam nodeBackground #16213e
-skinparam componentBackground #1a1a2e
-skinparam databaseBackground #0f3460
-skinparam nodeBorderColor #e94560
-skinparam fontColor white
-
-title Docker Container Deployment
-
-node "Windows Rechner\n192.168.0.105" {
-    
-    rectangle "Docker Network: iot_network (bridge)" {
-        
-        node "mqtt_broker\n(Mosquitto)" {
-            component "Port 1883 (MQTT)"
-            component "Port 8883 (MQTTs)"
-            file "mosquitto.conf"
-            file "passwd_file"
-            file "acls"
-        }
-        
-        node "provisioner_service\n(Python)" {
-            component "app.py"
-            component "MQTT Client"
-            component "Zertifikats-Generator"
-        }
-        
-        node "mqtt_bridge\n(Python)" {
-            component "bridge.py"
-            component "MQTT Subscriber"
-            component "JSON Validator"
-        }
-        
-        node "api_backend\n(Flask)" {
-            component "Port 5000"
-            component "REST Endpoints"
-            component "Templates"
-        }
-        
-        node "web_frontend\n(Nginx)" {
-            component "Port 8080"
-            component "index.html"
-            component "nginx.conf"
-        }
-        
-        database "postgres_db\n(PostgreSQL 15)" {
-            component "Port 5432"
-            component "sensor_data"
-            component "device_status"
-            component "devices"
-            file "init.sql"
-        }
-    }
-}
-
-node "ESP8266\n192.168.0.200" {
-    component "MAX6675 Sensor"
-    component "MQTTs Client"
-    component "Provisioning"
-}
-
-' Verbindungen
-ESP -down-> mqtt_broker : MQTTs (TLS) Port 8883
-ESP -down-> provisioner_service : Provisioning (temporär) Port 1883
-
-web_frontend -right-> api_backend : HTTP Port 5000
-api_backend -down-> postgres_db : SQL Port 5432
-provisioner_service -down-> postgres_db : SQL Port 5432
-mqtt_bridge -down-> postgres_db : SQL Port 5432
-
-mqtt_bridge -up-> mqtt_broker : MQTT Port 1883
-provisioner_service -up-> mqtt_broker : MQTT Port 1883
-
-@enduml
-
-
-Technologie-Stack
 Komponente	Technologie	Version	Port
 Edge Device	ESP8266 + MAX6675	-	-
 Firmware	Arduino C++	-	-
@@ -198,8 +74,9 @@ Frontend	Nginx + HTML/JS	latest	8080
 Database	PostgreSQL	15	5432
 Visualisierung	Chart.js	4.x	-
 Container	Docker + Compose	24.x	-
-🔌 Schnittstellen
-1. MQTT Schnittstellen
+
+## 🔌 Schnittstellen
+### 1. MQTT Schnittstellen
 Provisioning Topics
 Topic	Richtung	Beschreibung	Payload
 provisioning/request	ESP → Provisioner	Anfrage für neue Credentials	{"mac_address":"...", "device_id":"...", "firmware_version":"..."}
@@ -211,7 +88,7 @@ Status Topics
 Topic	Richtung	Beschreibung
 status/{device_id}/online	ESP → Broker	Gerät ist online
 status/{device_id}/will	ESP → Broker	Last Will Nachricht
-2. REST API Endpoints (Port 5000)
+### 2. REST API Endpoints (Port 5000)
 Methode	Endpoint	Beschreibung	Response
 GET	/api/latest	Aktuellste Temperatur	{"device_id":"...", "temperature":25.5, "unit":"celsius", "timestamp":"2026-04-17 10:30:00"}
 GET	/api/history?hours=24&limit=200	Historische Daten	[{"device_id":"...", "temperature":25.5, "timestamp":"..."}]
@@ -219,8 +96,10 @@ GET	/api/devices	Alle registrierten Geräte	[{"device_id":"...", "status":"onlin
 GET	/api/stats?hours=24	Statistiken	{"min_temp":23.5, "max_temp":25.8, "avg_temp":24.6, "count":288}
 GET	/api/health	Health Check	{"status":"healthy", "database":"connected", "timezone":"Europe/Berlin"}
 GET	/	Dashboard HTML	HTML Seite
-3. Datenbank Schema
-sensor_data Tabelle
+
+## Datenbank Schema
+
+### sensor_data Tabelle
 sql
 
 CREATE TABLE sensor_data (
@@ -259,14 +138,15 @@ CREATE TABLE devices (
     provisioned_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-4. Docker Volumes & Bind Mounts
+## Docker Volumes & Bind Mounts
 Volume/Mount	Container	Beschreibung
 postgres_data	postgres_db	Persistente Datenbankdateien
 ./mosquitto/config:/mosquitto/config	mqtt_broker	Mosquitto Konfiguration
 ./mosquitto/passwd:/mosquitto/passwd	mqtt_broker	Passwortdatei
 ./certs:/mosquitto/certs:ro	mqtt_broker	TLS Zertifikate
 ./certs:/app/certs:ro	provisioner	CA Zertifikate
-💻 Voraussetzungen
+
+## 💻 Voraussetzungen
 
     Docker Desktop (Version 24.0+)
 
@@ -280,31 +160,31 @@ postgres_data	postgres_db	Persistente Datenbankdateien
 
     Python 3.11+ (für lokale Entwicklung)
 
-🚀 Installation
-1. Repository klonen
+## 🚀 Installation
+### 1. Repository klonen
 bash
 
 git clone https://github.com/dein-benutzername/IOT-Temperature-System.git
 cd IOT-Temperature-System
 
-2. Umgebungsvariablen konfigurieren
+### 2. Umgebungsvariablen konfigurieren
 
 Erstelle eine .env Datei:
 env
 
-# Datenbank
+## Datenbank
 DB_PASSWORD=dein_sicheres_passwort
 
-# MQTT Benutzer
+## MQTT Benutzer
 MQTT_BRIDGE_USER=bridge_user
 MQTT_BRIDGE_PASSWORD=bridge_passwort
 MQTT_PROVISION_USER=provisioner
 MQTT_PROVISION_PASSWORD=provisioner_passwort
 
-# Broker Adresse (IP des Hosts)
+## Broker Adresse (IP des Hosts)
 MQTT_BROKER_ADDRESS=192.168.0.105
 
-3. TLS Zertifikate generieren
+## 3. TLS Zertifikate generieren
 bash
 
 cd certs
@@ -315,12 +195,12 @@ openssl req -new -key server.key -out server.csr -subj "/CN=192.168.0.105"
 openssl x509 -req -days 365 -in server.csr -CA ca.crt -CAkey ca.key -set_serial 01 -out server.crt
 cd ..
 
-4. Docker Container starten
+## 4. Docker Container starten
 bash
 
 docker-compose up -d
 
-5. ESP8266 Firmware flashen
+## 5. ESP8266 Firmware flashen
 
     Öffne main.ino in Arduino IDE
 
@@ -334,7 +214,7 @@ docker-compose up -d
 
     Kompiliere und flashe auf ESP8266
 
-⚙️ Konfiguration
+## ⚙️ Konfiguration
 Mosquitto Konfiguration (mosquitto/config/mosquitto.conf)
 conf
 
@@ -366,26 +246,26 @@ IPAddress subnet(255, 255, 255, 0);
 const char* PROVISIONING_HOST = "192.168.0.105";
 const int PROVISIONING_PORT = 1883;
 
-🔧 Betrieb
+## 🔧 Betrieb
 Container Management
 bash
 
-# Alle Container starten
+### Alle Container starten
 docker-compose up -d
 
-# Container stoppen
+### Container stoppen
 docker-compose down
 
-# Logs anzeigen
+### Logs anzeigen
 docker-compose logs -f
 
-# Einzelnen Service neu starten
+### Einzelnen Service neu starten
 docker-compose restart bridge
 
-# Container neu bauen
+### Container neu bauen
 docker-compose build --no-cache bridge
 
-Dashboard Zugriff
+### Dashboard Zugriff
 Service	URL	Beschreibung
 Backend Dashboard	http://192.168.0.105:5000	Vollständiges Dashboard mit Diagramm
 Frontend Dashboard	http://192.168.0.105:8080	Einfaches Dashboard
@@ -393,16 +273,16 @@ API Health Check	http://192.168.0.105:5000/api/health	Statusabfrage
 Datenbank Abfragen
 bash
 
-# Letzte 10 Messungen
+### Letzte 10 Messungen
 docker exec postgres_db psql -U sensor_user -d sensordb -c "SELECT device_id, value, received_at FROM sensor_data ORDER BY id DESC LIMIT 10;"
 
-# Durchschnittstemperatur letzte Stunde
+### Durchschnittstemperatur letzte Stunde
 docker exec postgres_db psql -U sensor_user -d sensordb -c "SELECT AVG(value) FROM sensor_data WHERE received_at > NOW() - INTERVAL '1 hour';"
 
-# Gerätestatus
+### Gerätestatus
 docker exec postgres_db psql -U sensor_user -d sensordb -c "SELECT * FROM device_status;"
 
-📖 API Dokumentation
+## 📖 API Dokumentation
 GET /api/latest
 
 Response:
@@ -452,7 +332,7 @@ json
     "count": 288
 }
 
-🐛 Fehlersuche
+## 🐛 Fehlersuche
 Bridge startet nicht (pytz fehlt)
 bash
 
@@ -462,31 +342,32 @@ docker-compose up -d bridge
 MQTT Verbindungsfehler (rc=-2)
 bash
 
-# Prüfe ob Mosquitto läuft
+### Prüfe ob Mosquitto läuft
 docker ps | findstr mqtt
 
-# Prüfe Logs
+### Prüfe Logs
 docker logs mqtt_broker --tail 30
 
-# Teste TLS Verbindung
+### Teste TLS Verbindung
 docker exec mqtt_broker mosquitto_sub -t "test" -u test_device -P test_password_123 --cafile /mosquitto/certs/ca.crt -p 8883
 
 Keine Daten in der Datenbank
 bash
 
-# Prüfe Bridge Logs
+### Prüfe Bridge Logs
 docker logs mqtt_bridge --tail 50
 
-# Prüfe ESP8266 Verbindung
+### Prüfe ESP8266 Verbindung
 docker logs mqtt_broker --tail 20 | findstr "esp8266"
 
-# Sende manuelle Test-Nachricht
+### Sende manuelle Test-Nachricht
 docker exec mqtt_broker mosquitto_pub -t "sensor/temperatur" -m '{"device_id":"test","temp":25.5}' -u test_device -P test_password_123 -p 1883
 
 Factory Reset für ESP8266
 
 Sende RESET über den Seriellen Monitor (115200 Baud).
-🔮 Erweiterungsmöglichkeiten
+
+## 🔮 Erweiterungsmöglichkeiten
 1. Mehrere Sensoren
 
     Einfach weitere ESP8266 hinzufügen
@@ -496,7 +377,7 @@ Sende RESET über den Seriellen Monitor (115200 Baud).
 2. Alarme & Benachrichtigungen
 python
 
-# Beispiel für E-Mail Alarm bei Temperaturschwelle
+### Beispiel für E-Mail Alarm bei Temperaturschwelle
 if temperature > 30.0:
     send_email_alert("Hohe Temperatur!", temperature)
 
@@ -524,12 +405,12 @@ timescaledb:
 
     Firmware Update über MQTT
 
-📄 Lizenz
+## 📄 Lizenz
 
 MIT License - Siehe LICENSE Datei
 👥 Autoren
 
-    Dein Name - Initiales Projekt
+    Dein Nouridini Degbembia - Initiales Projekt
 
 🙏 Danksagung
 
