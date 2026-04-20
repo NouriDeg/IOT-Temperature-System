@@ -410,7 +410,7 @@ timescaledb:
 MIT License - Siehe LICENSE Datei
 👥 Autoren
 
-    Dein Nouridini Degbembia - Initiales Projekt
+    Nouridini Degbembia 
 
 🙏 Danksagung
 
