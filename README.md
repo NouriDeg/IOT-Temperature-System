@@ -282,6 +282,22 @@ docker exec postgres_db psql -U sensor_user -d sensordb -c "SELECT AVG(value) FR
 ### Gerätestatus
 docker exec postgres_db psql -U sensor_user -d sensordb -c "SELECT * FROM device_status;"
 
+### Zeige alle gespeicherten Temperaturdaten
+docker exec postgres_db psql -U sensor_user -d sensordb -c "SELECT COUNT(*) as total_measurements FROM sensor_data;"
+
+### Zeige die letzten 10 Messungen
+docker exec postgres_db psql -U sensor_user -d sensordb -c "SELECT device_id, value, unit, received_at FROM sensor_data ORDER BY id DESC LIMIT 10;"
+
+### Zeige Statistik
+docker exec postgres_db psql -U sensor_user -d sensordb -c "SELECT MIN(value) as min_temp, MAX(value) as max_temp, AVG(value) as avg_temp FROM sensor_data;"
+
+### Zeige Gerätestatus
+docker exec postgres_db psql -U sensor_user -d sensordb -c "SELECT * FROM device_status;"
+
+### Zeige die Tabellenstruktur
+docker exec postgres_db psql -U sensor_user -d sensordb -c "\dt"
+
+
 ## 📖 API Dokumentation
 GET /api/latest
 
@@ -408,6 +424,7 @@ timescaledb:
 ## 📄 Lizenz
 
 MIT License - Siehe LICENSE Datei
+
 👥 Autoren
 
     Nouridini Degbembia 

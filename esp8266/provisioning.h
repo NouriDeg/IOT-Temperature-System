@@ -37,12 +37,15 @@ private:
     return "esp8266_" + mac;
   }
   
-  // Wichtig: Der Callback MUSS als static Funktion oder Lambda registriert werden
-  static void staticCallback(char* topic, byte* payload, unsigned int length) {
-    // Die Instanz muss irgendwo gespeichert werden - einfacher: direkte Verarbeitung
-    ProvisioningClient* instance = nullptr;
-    // Das ist ein bekanntes Problem mit PubSubClient und Klassenmethoden
-    // Alternative: Verarbeite im Loop
+  // Callback für Provisioning Responses
+  void callback(char* topic, byte* payload, unsigned int length) {
+    String message;
+    for (unsigned int i = 0; i < length; i++) {
+      message += (char)payload[i];
+    }
+    receivedResponse = message;
+    provisioningComplete = true;
+    Serial.println(" Provisioning Response erhalten!");
   }
   
   void saveCredentials() {
@@ -71,9 +74,15 @@ public:
     Serial.print("   Device ID: ");
     Serial.println(device_id);
     
+    provisioningComplete = false;
+    receivedResponse = "";
+    
     // MQTT Client für Provisioning
     mqttClient.setClient(wifiClient);
     mqttClient.setServer(prov_host, prov_port);
+    mqttClient.setCallback([this](char* t, byte* p, unsigned int l) {
+      this->callback(t, p, l);
+    });
     
     // Verbinden
     int attempts = 0;
@@ -85,11 +94,11 @@ public:
     }
     
     if (!mqttClient.connected()) {
-      Serial.println(" Provisioning MQTT Verbindung fehlgeschlagen!");
+      Serial.println("❌ Provisioning MQTT Verbindung fehlgeschlagen!");
       return false;
     }
     
-    Serial.println("    Temporäre MQTT Verbindung hergestellt");
+    Serial.println(" ✅ Temporäre MQTT Verbindung hergestellt");
     
     // Response Topic abonnieren
     mqttClient.subscribe(prov_response_topic);
@@ -107,15 +116,10 @@ public:
     Serial.print(" Request gesendet: ");
     Serial.println(buffer);
     
-    // Auf Response warten - HIER MÜSSEN WIR LOOPEN UND NACH NACHRICHTEN SCHAUEN!
+    // Auf Response warten (30 Sekunden Timeout)
     unsigned long timeout = millis() + 30000;
     while (millis() < timeout && !provisioningComplete) {
-      mqttClient.loop();  // Wichtig: Verarbeitet eingehende Nachrichten!
-      
-      // Prüfe manuell auf Nachrichten (Fallback)
-      if (mqttClient.available()) {
-        // PubSubClient hat keine available() Methode - wir sind auf loop() angewiesen
-      }
+      mqttClient.loop();
       delay(50);
     }
     
@@ -182,12 +186,6 @@ public:
     delay(1000);
     ESP.restart();
   }
-  
-  // Hilfsfunktion um die Response manuell zu setzen (für Tests)
-  void setResponseForTesting(String response) {
-    receivedResponse = response;
-    provisioningComplete = true;
-  }
 };
 
-#endif 
+#endif

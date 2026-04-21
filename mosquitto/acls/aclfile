@@ -1,24 +1,17 @@
-# ============================================
-# ACLs fuer Mosquitto MQTT Broker
-# ============================================
-
-# Bridge Service (vollstaendiger Zugriff)
 user bridge_user
+topic read sensor/temperatur
 topic read sensor/#
-topic write sensor/#
-topic read status/#
-topic write status/#
+topic read status/+/online
+topic read lwt/+
 
-# Provisioning Service
 user provisioner
-topic write devices/+/provisioning/response
-topic read devices/+/provisioning/request
+topic read provisioning/request
+topic write provisioning/response
+topic read provisioning/status
+topic write provisioning/status
 
-# Frontend (nur lesen)
-user frontend_user
-topic read sensor/#
-topic read status/#
-
-# Deny all others (alles andere ist verboten)
-topic read #
-topic write #
+user test_device
+pattern write sensor/temperatur
+pattern write status/%u/online
+pattern write lwt/%u
+pattern read commands/%u/ota

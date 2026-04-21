@@ -9,6 +9,16 @@
 # - Provisioning Service (automatisches Geräte-Onboarding)
 # - Backend API (Flask Dashboard)
 # - Frontend (Nginx statisches Dashboard)
+# 
+# Sicherheitsfeatures:
+# - Least-Privilege-Prinzip durch ACLs
+# - Read-only Volumes wo möglich
+# - Healthchecks für alle Services
+# - Passwörter über .env Datei (nicht hardcoded)
+# ============================================
+
+# ============================================
+# SERVICES (Container)
 # ============================================
 
 services:
@@ -16,32 +26,42 @@ services:
   # 1. MQTT BROKER (Eclipse Mosquitto)
   # ============================================
   # Verantwortlich für die gesamte MQTT Kommunikation
-  # - Empfängt Temperaturdaten vom ESP8266
+  # - Empfängt Temperaturdaten vom ESP8266 (Port 8883 TLS)
+  # - Empfängt Provisioning Requests (Port 1883)
   # - Leitet Daten an Bridge und Provisioner weiter
   # - Verwaltet Authentifizierung und ACLs
+  # - Least-Privilege-Prinzip durch ACL Datei
   # ============================================
   mosquitto:
     image: eclipse-mosquitto:2.0                    # Offizielles Mosquitto Image
     container_name: mqtt_broker                     # Fester Container-Name
     ports:
-      - "1883:1883"      # MQTT (unverschlüsselt) - NUR für interne Container
+      - "1883:1883"      # MQTT (unverschlüsselt) - Für Provisioning & Bridge
       - "8883:8883"      # MQTTS (TLS verschlüsselt) - Für ESP8266 über WLAN
     volumes:
-      # Konfigurationsdatei (read-write, da Mosquitto ggf. schreiben muss)
-      - ./mosquitto/config:/mosquitto/config
-      # ACL Datei (read-only, da nur gelesen wird)
-      - ./mosquitto/acls:/mosquitto/acls:ro
-      # TLS Zertifikate (read-only, da nur für Verbindungen benötigt)
+      # Konfigurationsdatei (read-only für Sicherheit)
+      - ./mosquitto/config:/mosquitto/config:ro
+      # ACL Datei (read-only) - Least-Privilege-Prinzip
       - ./certs:/mosquitto/certs:ro
-      # Passwortdatei für Benutzer (read-write, da Mosquitto sie aktualisieren kann)
-      - ./mosquitto/passwd:/mosquitto/passwd
+      # Passwortdatei für Benutzer (read-only)
+      - ./mosquitto/passwd:/mosquitto/passwd:ro
+      # Logs (schreibbar für Mosquitto)
+      - ./mosquitto/log:/mosquitto/log
+      # Daten (schreibbar für Persistenz)
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/acls:/mosquitto/acls:ro   # ← ACL Datei (read-only)
+    environment:
+      - TZ=Europe/Berlin                            # Zeitzone für Logs
     restart: unless-stopped                         # Automatischer Neustart bei Absturz
     healthcheck:
-      # Prüft ob der Broker läuft, indem er eine Test-Nachricht abonniert
-      test:  ["CMD", "pgrep", "mosquitto"]
-      interval: 30s      # Alle 30 Sekunden prüfen
-      timeout: 10s       # Nach 10 Sekunden Timeout
-      retries: 3         # Nach 3 Fehlversuchen als "unhealthy" markieren
+      # Prüft ob der Broker läuft
+      test: ["CMD", "pgrep", "mosquitto"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - iot_network
+    
 
   # ============================================
   # 2. POSTGRESQL DATENBANK
@@ -57,15 +77,16 @@ services:
     environment:
       POSTGRES_DB: sensordb                         # Name der Standard-Datenbank
       POSTGRES_USER: sensor_user                    # Datenbank-Benutzer
-      POSTGRES_PASSWORD: ${DB_PASSWORD}             # Passwort aus .env (nicht hardcoded!)
-      TZ: Europe/Berlin                             # Zeitzone auf Berlin (Mitteleuropäische Zeit)
+      POSTGRES_PASSWORD: ${DB_PASSWORD}             # Passwort aus .env Datei
+      TZ: Europe/Berlin                             # Zeitzone für Zeitstempel
+      PGTZ: Europe/Berlin                           # PostgreSQL Zeitzone
     ports:
       - "5432:5432"      # PostgreSQL Standardport (für externe Tools wie pgAdmin)
     volumes:
       # Persistente Datenspeicherung (Daten überleben Container-Neustarts)
       - postgres_data:/var/lib/postgresql/data
       # Initialisierungsskripte (werden beim ersten Start ausgeführt)
-      - ./postgres:/docker-entrypoint-initdb.d:ro
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     restart: unless-stopped
     healthcheck:
       # Prüft ob die Datenbank bereit ist
@@ -73,6 +94,10 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
+    networks:
+      - iot_network
+    security_opt:
+      - no-new-privileges:true
 
   # ============================================
   # 3. BRIDGE SERVICE (MQTT → PostgreSQL)
@@ -82,6 +107,7 @@ services:
   # - Validiert JSON Payloads gegen Schema
   # - Speichert Daten in der Datenbank
   # - Behandelt Geräte-Status Updates
+  # - Least-Privilege: Nur Leserechte auf MQTT, Nur Schreibrecht auf DB
   # ============================================
   bridge:
     build: ./bridge                                  # Baut Image aus ./bridge/Dockerfile
@@ -104,6 +130,15 @@ services:
       postgres:
         condition: service_healthy                   # Wartet bis PostgreSQL gesund ist
     restart: unless-stopped
+    networks:
+      - iot_network
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"                              # Maximale Log-Größe
+        max-file: "3"                                # Anzahl der Log-Dateien
 
   # ============================================
   # 4. PROVISIONING SERVICE (Geräte-Onboarding)
@@ -139,6 +174,15 @@ services:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    networks:
+      - iot_network
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # ============================================
   # 5. BACKEND API (Flask Dashboard)
@@ -147,6 +191,7 @@ services:
   # - Zeigt Live-Dashboard mit Chart.js
   # - Bietet REST Endpunkte für Temperaturdaten
   # - Holt Daten aus PostgreSQL
+  # - Least-Privilege: Nur Leserechte auf DB
   # ============================================
   backend:
     build: ./backend                                  # Baut Image aus ./backend/Dockerfile
@@ -157,12 +202,23 @@ services:
       DB_NAME: sensordb
       DB_USER: sensor_user
       DB_PASSWORD: ${DB_PASSWORD}
+      FLASK_ENV: production                          # Produktionsmodus
+      FLASK_DEBUG: 0                                 # Debug deaktiviert
     ports:
       - "5000:5000"      # Flask Standardport für Web Dashboard
     depends_on:
       postgres:
         condition: service_healthy
     restart: unless-stopped
+    networks:
+      - iot_network
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # ============================================
   # 6. FRONTEND (Nginx - statisches Dashboard)
@@ -170,6 +226,7 @@ services:
   # Alternatives statisches Web Dashboard
   # - Dient als Fallback oder für einfache Visualisierung
   # - Zeigt die aktuellste Temperatur an
+  # - Statische Dateien, daher sehr sicher
   # ============================================
   frontend:
     build: ./frontend                                 # Baut Image aus ./frontend/Dockerfile
@@ -179,6 +236,15 @@ services:
     depends_on:
       - backend
     restart: unless-stopped
+    networks:
+      - iot_network
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 # ============================================
 # VOLUMES (Persistente Datenspeicherung)
@@ -186,11 +252,14 @@ services:
 # Diese Volumes bleiben erhalten, auch wenn Container gelöscht werden
 volumes:
   postgres_data:            # PostgreSQL Datenbankdateien
+    name: iot_postgres_data
+    driver: local
 
 # ============================================
 # NETZWERK
 # ============================================
 # Alle Container kommunizieren über dieses Bridge-Netzwerk
 networks:
-  default:
+  iot_network:
     name: iot_network        # Benutzerdefinierter Netzwerkname
+    driver: bridge

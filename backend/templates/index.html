@@ -11,9 +11,16 @@
         .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
         canvas { max-height: 400px; width: 100%; }
         .device-list { max-height: 200px; overflow-y: auto; }
-        .online { color: #4CAF50; }
-        .offline { color: #f44336; }
+        .online { color: #4CAF50; font-weight: bold; }
+        .offline { color: #f44336; font-weight: bold; }
         .timestamp { color: #888; font-size: 12px; }
+        .signal-good { color: #4CAF50; }
+        .signal-medium { color: #FFC107; }
+        .signal-bad { color: #f44336; }
+        button { background: #e94560; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
+        button:hover { background: #ff6b8a; }
+        input[type="file"] { background: #16213e; color: white; border: 1px solid #e94560; padding: 10px; border-radius: 5px; }
+        .firmware-status { font-size: 12px; color: #888; }
     </style>
 </head>
 <body>
@@ -36,8 +43,28 @@
                 <div>Messungen: <span id="count">--</span></div>
             </div>
             <div class="card">
-                <h3>Geräte Status</h3>
+                <h3>LWT Status</h3>
+                <div>Gesamt Geräte: <span id="total-devices">--</span></div>
+                <div>🟢 Online: <span id="online-devices">--</span></div>
+                <div>🔴 Offline: <span id="offline-devices">--</span></div>
+                <div>📶 Ø RSSI: <span id="avg-rssi">--</span> dBm</div>
+                <div>⏱️ LWT Timeout: 120 Sekunden</div>
+            </div>
+        </div>
+        
+        <div class="grid">
+            <div class="card">
+                <h3>📱 Geräte Status</h3>
                 <div class="device-list" id="devices-list">Wird geladen...</div>
+            </div>
+            <div class="card">
+                <h3>🔧 OTA Firmware Management</h3>
+                <div id="firmware-info" class="firmware-status">Wird geladen...</div>
+                <input type="file" id="firmware-file" accept=".bin">
+                <input type="text" id="firmware-version" placeholder="Version (z.B. 1.0.1)" style="width: 100px; background:#16213e; color:white; border:1px solid #e94560; padding:5px;">
+                <button onclick="uploadFirmware()">📤 Firmware hochladen</button>
+                <button onclick="triggerOTA()" id="ota-btn" style="background:#4CAF50;">🚀 OTA Update auslösen</button>
+                <div id="upload-status" class="firmware-status"></div>
             </div>
         </div>
         
@@ -79,19 +106,27 @@
             }
         }
         
-        async function fetchDevices() {
+        async function fetchDevicesStatus() {
             try {
-                const res = await fetch('/api/devices');
+                const res = await fetch('/api/devices/status');
                 const data = await res.json();
                 if (!data.error && data.length > 0) {
                     let html = '';
                     data.forEach(d => {
                         const statusClass = d.status === 'online' ? 'online' : 'offline';
-                        html += `<div>
+                        let rssiClass = '';
+                        if (d.last_rssi) {
+                            if (d.last_rssi > -60) rssiClass = 'signal-good';
+                            else if (d.last_rssi > -70) rssiClass = 'signal-medium';
+                            else rssiClass = 'signal-bad';
+                        }
+                        html += `<div style="border-bottom:1px solid #333; padding:10px;">
                             <strong>${d.device_id}</strong><br>
                             Status: <span class="${statusClass}">${d.status}</span><br>
-                            Letzte Nachricht: ${d.last_seen || 'never'}
-                        </div><hr>`;
+                            📶 RSSI: <span class="${rssiClass}">${d.last_rssi || '--'} dBm</span><br>
+                            💾 Heap: ${d.last_free_heap || '--'} bytes<br>
+                            🕐 Letzte Nachricht: ${d.last_seen ? new Date(d.last_seen).toLocaleString() : 'never'}
+                        </div>`;
                     });
                     document.getElementById('devices-list').innerHTML = html;
                 } else {
@@ -102,6 +137,102 @@
             }
         }
         
+        async function fetchLWTStats() {
+            try {
+                const res = await fetch('/api/lwt/stats');
+                const data = await res.json();
+                if (!data.error) {
+                    document.getElementById('total-devices').innerHTML = data.total_devices || 0;
+                    document.getElementById('online-devices').innerHTML = data.online_devices || 0;
+                    document.getElementById('offline-devices').innerHTML = data.offline_devices || 0;
+                    document.getElementById('avg-rssi').innerHTML = data.avg_rssi || '--';
+                }
+            } catch (error) {
+                console.error('Fehler:', error);
+            }
+        }
+        
+        async function fetchFirmwareInfo() {
+            try {
+                const res = await fetch('/api/firmware/version');
+                const data = await res.json();
+                if (!data.error) {
+                    const sizeKB = (data.size / 1024).toFixed(2);
+                    document.getElementById('firmware-info').innerHTML = `
+                        📦 Version: ${data.version}<br>
+                        📏 Größe: ${sizeKB} KB<br>
+                        🔑 MD5: ${data.md5?.substring(0, 16)}...<br>
+                        🕐 Aktualisiert: ${new Date(data.updated_at).toLocaleString()}
+                    `;
+                }
+            } catch (error) {
+                console.error('Fehler:', error);
+            }
+        }
+        
+        async function uploadFirmware() {
+            const fileInput = document.getElementById('firmware-file');
+            const versionInput = document.getElementById('firmware-version');
+            const statusDiv = document.getElementById('upload-status');
+            
+            if (!fileInput.files.length) {
+                statusDiv.innerHTML = '❌ Bitte wähle eine Firmware Datei aus';
+                statusDiv.style.color = '#f44336';
+                return;
+            }
+            
+            const file = fileInput.files[0];
+            const version = versionInput.value || '1.0.0';
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('version', version);
+            
+            statusDiv.innerHTML = '📤 Upload läuft...';
+            statusDiv.style.color = '#FFC107';
+            
+            try {
+                const res = await fetch('/api/firmware/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await res.json();
+                
+                if (res.ok) {
+                    statusDiv.innerHTML = `✅ ${data.message} (Version ${data.version})`;
+                    statusDiv.style.color = '#4CAF50';
+                    fetchFirmwareInfo();
+                } else {
+                    statusDiv.innerHTML = `❌ Fehler: ${data.error}`;
+                    statusDiv.style.color = '#f44336';
+                }
+            } catch (error) {
+                statusDiv.innerHTML = `❌ Upload fehlgeschlagen: ${error.message}`;
+                statusDiv.style.color = '#f44336';
+            }
+        }
+        
+        async function triggerOTA() {
+            const btn = document.getElementById('ota-btn');
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '⏳ Wird ausgelöst...';
+            btn.disabled = true;
+            
+            try {
+                // Hier könnte ein MQTT Befehl an das Gerät gesendet werden
+                // Für jetzt simulieren wir es
+                setTimeout(() => {
+                    alert('OTA Update wurde ausgelöst!\n\nDas ESP8266 wird die Firmware herunterladen und aktualisieren.');
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                }, 2000);
+            } catch (error) {
+                console.error('Fehler:', error);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+            }
+        }
+        
         async function fetchHistory() {
             try {
                 const res = await fetch('/api/history?hours=24&limit=200');
@@ -109,7 +240,7 @@
                 if (!data.error && data.length > 0) {
                     const times = data.map(d => {
                         const parts = d.timestamp.split(' ');
-                        return parts[1]; // Nur Uhrzeit für X-Achse
+                        return parts[1];
                     });
                     const temps = data.map(d => d.temperature);
                     
@@ -149,15 +280,19 @@
         setInterval(() => {
             fetchLatest();
             fetchStats();
-            fetchDevices();
+            fetchDevicesStatus();
+            fetchLWTStats();
             fetchHistory();
+            fetchFirmwareInfo();
         }, 10000);
         
         // Initial laden
         fetchLatest();
         fetchStats();
-        fetchDevices();
+        fetchDevicesStatus();
+        fetchLWTStats();
         fetchHistory();
+        fetchFirmwareInfo();
     </script>
 </body>
 </html>

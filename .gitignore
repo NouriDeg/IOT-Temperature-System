@@ -1,6 +1,8 @@
 # ============================================
-# IDE und Editoren
+# GIT IGNORE FÜR ESP8266 IOT PROJEKT
 # ============================================
+# OTA Konfiguration (enthält Passwörter!)
+ota_config.h
 .idea/
 .vscode/
 *.swp
@@ -15,6 +17,15 @@ Thumbs.db
 build/
 *.elf
 *.hex
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Umgebungsvariablen
+.env
+secrets.h
+config.h
 
 # PlatformIO
 .pio/
@@ -181,9 +192,9 @@ build/
 .eggs/
 # Python
 __pycache__/
+venv/
 *.pyc
 .venv/
-venv/
 .venv
 .history
 # IDE
