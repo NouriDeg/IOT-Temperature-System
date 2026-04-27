@@ -1,40 +1,165 @@
 <!DOCTYPE html>
-<html>
+<!-- 
+ =============================================================================
+ IoT DASHBOARD - TEMPERATURE MONITORING SYSTEM
+ =============================================================================
+ Dieses Dashboard zeigt live Temperaturdaten von ESP8266 Sensoren an.
+ 
+ Features:
+ - Live Temperaturanzeige
+ - Statistik (Min, Max, Durchschnitt)
+ - LWT (Last Will Testament) Status
+ - Geräteliste mit Online/Offline Status
+ - OTA Firmware Management
+ - Temperaturverlauf als Diagramm (Chart.js)
+ 
+ Technologien:
+ - HTML5, CSS3
+ - JavaScript (ES6)
+ - Chart.js für Diagramme
+ - Fetch API für Backend Kommunikation
+  
+ IoT Temperature Monitoring System
+ Datum: 27.04.2026 
+ =============================================================================
+-->
+
+<html lang="de">                                   <!-- Deutsche Sprachausgabe -->
 <head>
+    <meta charset="UTF-8">                          <!-- Unterstützt Umlaute (ä, ö, ü) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">  <!-- Responsive Design -->
     <title>IoT Dashboard - Berlin Zeit</title>
+    
+    <!-- Chart.js Bibliothek für Temperaturdiagramme -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
     <style>
-        body { font-family: Arial, sans-serif; margin: 20px; background: #1a1a2e; color: white; }
-        .container { max-width: 1200px; margin: auto; }
-        .card { background: #16213e; padding: 20px; border-radius: 10px; margin: 10px; }
-        .temp-big { font-size: 48px; font-weight: bold; color: #e94560; }
-        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
-        canvas { max-height: 400px; width: 100%; }
-        .device-list { max-height: 200px; overflow-y: auto; }
-        .online { color: #4CAF50; font-weight: bold; }
-        .offline { color: #f44336; font-weight: bold; }
-        .timestamp { color: #888; font-size: 12px; }
-        .signal-good { color: #4CAF50; }
-        .signal-medium { color: #FFC107; }
-        .signal-bad { color: #f44336; }
-        button { background: #e94560; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin: 5px; }
-        button:hover { background: #ff6b8a; }
-        input[type="file"] { background: #16213e; color: white; border: 1px solid #e94560; padding: 10px; border-radius: 5px; }
-        .firmware-status { font-size: 12px; color: #888; }
+        /* ============================================
+           CSS STYLES - DARK THEME DASHBOARD
+           ============================================ */
+        
+        /* Grundlegender Body-Stil */
+        body { 
+            font-family: Arial, sans-serif; 
+            margin: 20px; 
+            background: #1a1a2e;      /* Dunkler Hintergrund */
+            color: white;              /* Weiße Schrift */
+        }
+        
+        /* Hauptcontainer - zentriert und max. Breite */
+        .container { 
+            max-width: 1200px; 
+            margin: auto; 
+        }
+        
+        /* Karten-Stil für alle Dashboard-Komponenten */
+        .card { 
+            background: #16213e;       /* Dunkelblaue Karten */
+            padding: 20px; 
+            border-radius: 10px;       /* Abgerundete Ecken */
+            margin: 10px; 
+        }
+        
+        /* Große Temperaturanzeige */
+        .temp-big { 
+            font-size: 48px; 
+            font-weight: bold; 
+            color: #e94560;            /* Akzentfarbe Pink/Rot */
+        }
+        
+        /* Grid-Layout für 3-spaltige Anordnung */
+        .grid { 
+            display: grid; 
+            grid-template-columns: repeat(3, 1fr);  /* 3 gleiche Spalten */
+            gap: 20px;                /* Abstand zwischen den Spalten */
+        }
+        
+        /* Diagramm-Container */
+        canvas { 
+            max-height: 400px; 
+            width: 100%; 
+        }
+        
+        /* Geräteliste mit Scrollbar bei Überlauf */
+        .device-list { 
+            max-height: 200px; 
+            overflow-y: auto;         /* Vertikale Scrollbar */
+        }
+        
+        /* Online-Status Farbe Grün */
+        .online { 
+            color: #4CAF50; 
+            font-weight: bold; 
+        }
+        
+        /* Offline-Status Farbe Rot */
+        .offline { 
+            color: #f44336; 
+            font-weight: bold; 
+        }
+        
+        /* Zeitstempel (kleiner, grau) */
+        .timestamp { 
+            color: #888; 
+            font-size: 12px; 
+        }
+        
+        /* RSSI Signalstärke Farben */
+        .signal-good { color: #4CAF50; }    /* Grün = Gutes Signal */
+        .signal-medium { color: #FFC107; }  /* Gelb = Mittleres Signal */
+        .signal-bad { color: #f44336; }     /* Rot = Schlechtes Signal */
+        
+        /* Button-Stile */
+        button { 
+            background: #e94560; 
+            color: white; 
+            border: none; 
+            padding: 10px 20px; 
+            border-radius: 5px; 
+            cursor: pointer; 
+            margin: 5px; 
+        }
+        
+        /* Button Hover-Effekt */
+        button:hover { 
+            background: #ff6b8a; 
+        }
+        
+        /* Datei-Upload Feld */
+        input[type="file"] { 
+            background: #16213e; 
+            color: white; 
+            border: 1px solid #e94560; 
+            padding: 10px; 
+            border-radius: 5px; 
+        }
+        
+        /* Firmware Status Text (klein, grau) */
+        .firmware-status { 
+            font-size: 12px; 
+            color: #888; 
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- Hauptüberschrift -->
         <h1>🌡️ IoT Temperature Monitoring System</h1>
         <p class="timestamp">Zeitzone: Europe/Berlin (CET/CEST)</p>
         
+        <!-- ============================================
+             ERSTE ZEILE: 3 KARTEN
+             ============================================ -->
         <div class="grid">
+            <!-- Karte 1: Aktuelle Temperatur -->
             <div class="card">
                 <h3>Aktuelle Temperatur</h3>
                 <div class="temp-big" id="current-temp">--.- °C</div>
                 <div id="current-device"></div>
                 <div id="current-time" class="timestamp"></div>
             </div>
+            
+            <!-- Karte 2: Statistik (letzte 24h) -->
             <div class="card">
                 <h3>Statistik (letzte 24h)</h3>
                 <div>Min: <span id="min-temp">--</span> °C</div>
@@ -42,6 +167,8 @@
                 <div>Durchschnitt: <span id="avg-temp">--</span> °C</div>
                 <div>Messungen: <span id="count">--</span></div>
             </div>
+            
+            <!-- Karte 3: LWT (Last Will Testament) Status -->
             <div class="card">
                 <h3>LWT Status</h3>
                 <div>Gesamt Geräte: <span id="total-devices">--</span></div>
@@ -52,45 +179,79 @@
             </div>
         </div>
         
+        <!-- ============================================
+             ZWEITE ZEILE: GERÄTELISTE & OTA MANAGEMENT
+             ============================================ -->
         <div class="grid">
+            <!-- Karte 4: Geräteliste mit Status -->
             <div class="card">
                 <h3>📱 Geräte Status</h3>
                 <div class="device-list" id="devices-list">Wird geladen...</div>
             </div>
+            
+            <!-- Karte 5: OTA (Over-the-Air) Firmware Management -->
             <div class="card">
                 <h3>🔧 OTA Firmware Management</h3>
                 <div id="firmware-info" class="firmware-status">Wird geladen...</div>
+                
+                <!-- Firmware Datei auswählen -->
                 <input type="file" id="firmware-file" accept=".bin">
-                <input type="text" id="firmware-version" placeholder="Version (z.B. 1.0.1)" style="width: 100px; background:#16213e; color:white; border:1px solid #e94560; padding:5px;">
+                
+                <!-- Firmware Version eingeben -->
+                <input type="text" id="firmware-version" placeholder="Version (z.B. 1.0.1)" 
+                       style="width: 100px; background:#16213e; color:white; border:1px solid #e94560; padding:5px;">
+                
+                <!-- Buttons für Firmware Upload und OTA Update -->
                 <button onclick="uploadFirmware()">📤 Firmware hochladen</button>
                 <button onclick="triggerOTA()" id="ota-btn" style="background:#4CAF50;">🚀 OTA Update auslösen</button>
+                
+                <!-- Statusmeldung für Upload -->
                 <div id="upload-status" class="firmware-status"></div>
             </div>
         </div>
         
+        <!-- ============================================
+             DRITTE ZEILE: TEMPERATURVERLAUF DIAGRAMM
+             ============================================ -->
         <div class="card">
             <h3>Temperaturverlauf (letzte 24h)</h3>
-            <canvas id="tempChart"></canvas>
+            <canvas id="tempChart"></canvas>   <!-- Canvas für Chart.js Diagramm -->
         </div>
     </div>
 
     <script>
-        let chart;
+        // ============================================
+        // GLOBALE VARIABLEN
+        // ============================================
+        let chart;          // Chart.js Diagramm-Objekt
         
+        // ============================================
+        // API ABFRAGEN (FETCH FUNKTIONEN)
+        // ============================================
+        
+        /**
+         * Holt die aktuellste Temperatur vom Backend
+         * Endpoint: GET /api/latest
+         */
         async function fetchLatest() {
             try {
                 const res = await fetch('/api/latest');
                 const data = await res.json();
                 if (!data.error) {
+                    // Aktualisiere die Anzeige
                     document.getElementById('current-temp').innerHTML = data.temperature + ' °C';
                     document.getElementById('current-device').innerHTML = 'Gerät: ' + data.device_id;
                     document.getElementById('current-time').innerHTML = 'Letzte Messung: ' + data.timestamp;
                 }
             } catch (error) {
-                console.error('Fehler:', error);
+                console.error('Fehler beim Laden der aktuellen Temperatur:', error);
             }
         }
         
+        /**
+         * Holt Statistiken (Min, Max, Avg) der letzten 24h
+         * Endpoint: GET /api/stats?hours=24
+         */
         async function fetchStats() {
             try {
                 const res = await fetch('/api/stats?hours=24');
@@ -102,10 +263,14 @@
                     document.getElementById('count').innerHTML = data.count || 0;
                 }
             } catch (error) {
-                console.error('Fehler:', error);
+                console.error('Fehler beim Laden der Statistiken:', error);
             }
         }
         
+        /**
+         * Holt den Status aller Geräte (online/offline, RSSI, Heap)
+         * Endpoint: GET /api/devices/status
+         */
         async function fetchDevicesStatus() {
             try {
                 const res = await fetch('/api/devices/status');
@@ -113,15 +278,20 @@
                 if (!data.error && data.length > 0) {
                     let html = '';
                     data.forEach(d => {
+                        // Status-Klasse für Farbe
                         const statusClass = d.status === 'online' ? 'online' : 'offline';
+                        
+                        // RSSI-Klasse für Signalstärke
                         let rssiClass = '';
                         if (d.last_rssi) {
                             if (d.last_rssi > -60) rssiClass = 'signal-good';
                             else if (d.last_rssi > -70) rssiClass = 'signal-medium';
                             else rssiClass = 'signal-bad';
                         }
+                        
+                        // HTML für jedes Gerät
                         html += `<div style="border-bottom:1px solid #333; padding:10px;">
-                            <strong>${d.device_id}</strong><br>
+                            <strong>${escapeHtml(d.device_id)}</strong><br>
                             Status: <span class="${statusClass}">${d.status}</span><br>
                             📶 RSSI: <span class="${rssiClass}">${d.last_rssi || '--'} dBm</span><br>
                             💾 Heap: ${d.last_free_heap || '--'} bytes<br>
@@ -133,10 +303,14 @@
                     document.getElementById('devices-list').innerHTML = 'Keine Geräte gefunden';
                 }
             } catch (error) {
-                console.error('Fehler:', error);
+                console.error('Fehler beim Laden der Geräteliste:', error);
             }
         }
         
+        /**
+         * Holt LWT Statistiken (Anzahl Geräte, Online/Offline, durchschnittliche RSSI)
+         * Endpoint: GET /api/lwt/stats
+         */
         async function fetchLWTStats() {
             try {
                 const res = await fetch('/api/lwt/stats');
@@ -148,16 +322,20 @@
                     document.getElementById('avg-rssi').innerHTML = data.avg_rssi || '--';
                 }
             } catch (error) {
-                console.error('Fehler:', error);
+                console.error('Fehler beim Laden der LWT Statistiken:', error);
             }
         }
         
+        /**
+         * Holt Informationen über die aktuelle Firmware
+         * Endpoint: GET /api/firmware/version
+         */
         async function fetchFirmwareInfo() {
             try {
                 const res = await fetch('/api/firmware/version');
                 const data = await res.json();
                 if (!data.error) {
-                    const sizeKB = (data.size / 1024).toFixed(2);
+                    const sizeKB = (data.size / 1024).toFixed(2);  // Bytes in KB umrechnen
                     document.getElementById('firmware-info').innerHTML = `
                         📦 Version: ${data.version}<br>
                         📏 Größe: ${sizeKB} KB<br>
@@ -166,15 +344,20 @@
                     `;
                 }
             } catch (error) {
-                console.error('Fehler:', error);
+                console.error('Fehler beim Laden der Firmware Info:', error);
             }
         }
         
+        /**
+         * Lädt eine neue Firmware Datei hoch
+         * Endpoint: POST /api/firmware/upload
+         */
         async function uploadFirmware() {
             const fileInput = document.getElementById('firmware-file');
             const versionInput = document.getElementById('firmware-version');
             const statusDiv = document.getElementById('upload-status');
             
+            // Prüfe ob eine Datei ausgewählt wurde
             if (!fileInput.files.length) {
                 statusDiv.innerHTML = '❌ Bitte wähle eine Firmware Datei aus';
                 statusDiv.style.color = '#f44336';
@@ -184,10 +367,12 @@
             const file = fileInput.files[0];
             const version = versionInput.value || '1.0.0';
             
+            // FormData für Datei-Upload
             const formData = new FormData();
             formData.append('file', file);
             formData.append('version', version);
             
+            // Status während des Uploads
             statusDiv.innerHTML = '📤 Upload läuft...';
             statusDiv.style.color = '#FFC107';
             
@@ -201,7 +386,7 @@
                 if (res.ok) {
                     statusDiv.innerHTML = `✅ ${data.message} (Version ${data.version})`;
                     statusDiv.style.color = '#4CAF50';
-                    fetchFirmwareInfo();
+                    fetchFirmwareInfo();  // Aktualisiere Firmware Info
                 } else {
                     statusDiv.innerHTML = `❌ Fehler: ${data.error}`;
                     statusDiv.style.color = '#f44336';
@@ -212,87 +397,123 @@
             }
         }
         
+        /**
+         * Löst ein OTA (Over-the-Air) Update aus
+         * Sendet einen Befehl an den ESP8266
+         */
         async function triggerOTA() {
             const btn = document.getElementById('ota-btn');
             const originalText = btn.innerHTML;
+            
+            // Button deaktivieren und Text ändern
             btn.innerHTML = '⏳ Wird ausgelöst...';
             btn.disabled = true;
             
             try {
-                // Hier könnte ein MQTT Befehl an das Gerät gesendet werden
-                // Für jetzt simulieren wir es
+                // Simuliere OTA Update (würde eigentlich MQTT Befehl senden)
                 setTimeout(() => {
                     alert('OTA Update wurde ausgelöst!\n\nDas ESP8266 wird die Firmware herunterladen und aktualisieren.');
                     btn.innerHTML = originalText;
                     btn.disabled = false;
                 }, 2000);
             } catch (error) {
-                console.error('Fehler:', error);
+                console.error('Fehler beim OTA Update:', error);
                 btn.innerHTML = originalText;
                 btn.disabled = false;
             }
         }
         
+        /**
+         * Holt den Temperaturverlauf der letzten 24h und zeichnet Diagramm
+         * Endpoint: GET /api/history?hours=24&limit=200
+         */
         async function fetchHistory() {
             try {
                 const res = await fetch('/api/history?hours=24&limit=200');
                 const data = await res.json();
+                
                 if (!data.error && data.length > 0) {
+                    // Extrahiere nur die Uhrzeit für die X-Achse
                     const times = data.map(d => {
                         const parts = d.timestamp.split(' ');
-                        return parts[1];
+                        return parts[1];  // Nur HH:MM:SS
                     });
+                    
+                    // Extrahiere Temperaturwerte für die Y-Achse
                     const temps = data.map(d => d.temperature);
                     
+                    // Lösche altes Diagramm falls vorhanden
                     if (chart) chart.destroy();
+                    
+                    // Zeichne neues Diagramm
                     const ctx = document.getElementById('tempChart').getContext('2d');
                     chart = new Chart(ctx, {
-                        type: 'line',
+                        type: 'line',                    // Liniendiagramm
                         data: {
-                            labels: times,
+                            labels: times,               // X-Achse: Uhrzeiten
                             datasets: [{
                                 label: 'Temperatur (°C)',
-                                data: temps,
-                                borderColor: '#e94560',
-                                backgroundColor: 'rgba(233, 69, 96, 0.1)',
-                                fill: true
+                                data: temps,             // Y-Achse: Temperaturen
+                                borderColor: '#e94560',  // Linienfarbe
+                                backgroundColor: 'rgba(233, 69, 96, 0.1)',  // Füllfarbe
+                                fill: true               // Fläche unter der Linie füllen
                             }]
                         },
                         options: {
-                            responsive: true,
-                            maintainAspectRatio: true,
+                            responsive: true,            // Responsives Design
+                            maintainAspectRatio: true,   // Seitenverhältnis beibehalten
                             plugins: {
-                                legend: { labels: { color: 'white' } }
+                                legend: { labels: { color: 'white' } }  // Weiße Legende
                             },
                             scales: {
-                                x: { ticks: { color: 'white', maxRotation: 45, minRotation: 45 } },
-                                y: { ticks: { color: 'white' } }
+                                x: { 
+                                    ticks: { color: 'white', maxRotation: 45, minRotation: 45 }  // Weiße Achsenbeschriftung
+                                },
+                                y: { 
+                                    ticks: { color: 'white' } 
+                                }
                             }
                         }
                     });
                 }
             } catch (error) {
-                console.error('Fehler:', error);
+                console.error('Fehler beim Laden des Temperaturverlaufs:', error);
             }
         }
         
-        // Alle 10 Sekunden aktualisieren
-        setInterval(() => {
-            fetchLatest();
-            fetchStats();
-            fetchDevicesStatus();
-            fetchLWTStats();
-            fetchHistory();
-            fetchFirmwareInfo();
-        }, 10000);
+        /**
+         * HTML Escape gegen XSS-Angriffe
+         * Konvertiert Sonderzeichen in HTML-Entities
+         */
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
         
-        // Initial laden
-        fetchLatest();
-        fetchStats();
-        fetchDevicesStatus();
-        fetchLWTStats();
-        fetchHistory();
-        fetchFirmwareInfo();
+        // ============================================
+        // AUTOMATISCHE AKTUALISIERUNG
+        // ============================================
+        
+        // Alle 10 Sekunden werden alle Daten aktualisiert
+        setInterval(() => {
+            fetchLatest();           // Aktuelle Temperatur
+            fetchStats();            // Statistiken
+            fetchDevicesStatus();    // Geräteliste
+            fetchLWTStats();         // LWT Status
+            fetchHistory();          // Temperaturverlauf
+            fetchFirmwareInfo();     // Firmware Info
+        }, 10000);  // 10.000 Millisekunden = 10 Sekunden
+        
+        // ============================================
+        // INITIALES LADEN BEIM SEITENSTART
+        // ============================================
+        fetchLatest();           // Aktuelle Temperatur
+        fetchStats();            // Statistiken
+        fetchDevicesStatus();    // Geräteliste
+        fetchLWTStats();         // LWT Status
+        fetchHistory();          // Temperaturverlauf
+        fetchFirmwareInfo();     // Firmware Info
     </script>
 </body>
 </html>

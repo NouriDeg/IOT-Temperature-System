@@ -1,31 +1,178 @@
 ﻿<!DOCTYPE html>
-<html>
+<!-- 
+ =============================================================================
+ EINFACHES IOT DASHBOARD - NUR AKTUELLE TEMPERATUR
+ =============================================================================
+ Dies ist eine minimalistische Version des Dashboards.
+ Sie zeigt nur die aktuellste Temperatur an - ohne Diagramme oder Geräteliste.
+ 
+ Vorteile:
+ - Sehr einfach und leichtgewichtig
+ - Schnelle Ladezeit
+ - Ideal für mobile Geräte oder eingebettete Displays
+ 
+ Technologien:
+ - HTML5, CSS3
+ - JavaScript (ES6)
+ - Fetch API für Backend Kommunikation
+ 
+ IoT Temperature Monitoring System
+ Datum: 24.04.2026 
+ =============================================================================
+-->
+
+<html lang="de">                                   <!-- Deutsche Sprachausgabe -->
 <head>
+    <meta charset="UTF-8">                          <!-- Unterstützt Umlaute (ä, ö, ü) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">  <!-- Responsive Design für mobile Geräte -->
     <title>IoT Dashboard</title>
+    
     <style>
-        body { font-family: Arial; text-align: center; margin-top: 50px; }
-        .temp { font-size: 72px; color: #ff6600; }
+        /* ============================================
+           CSS STYLES - EINFACHES DASHBOARD
+           ============================================ */
+        
+        /* Zentrierung und Abstände */
+        body { 
+            font-family: Arial, sans-serif;    /* Saubere serifenlose Schrift */
+            text-align: center;                /* Zentriert alles */
+            margin-top: 50px;                  /* Abstand nach oben */
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); /* Dunkler Verlauf */
+            color: white;                      /* Weiße Schrift */
+            min-height: 100vh;                 /* Volle Bildschirmhöhe */
+        }
+        
+        /* Große Temperaturanzeige */
+        .temp { 
+            font-size: 72px;                   /* Sehr große Schrift */
+            color: #ff6600;                    /* Orange Farbe für Temperatur */
+            font-weight: bold;                 /* Fettschrift */
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);  /* Leichter Schatten für bessere Lesbarkeit */
+            margin: 20px 0;                    /* Abstand oben und unten */
+        }
+        
+        /* Optional: Container für bessere Darstellung */
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        /* Zeitstempel-Stil */
+        .timestamp {
+            color: #888;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+        
+        /* Überschrift */
+        h1 {
+            color: #e94560;
+            font-size: 2em;
+            margin-bottom: 30px;
+        }
     </style>
 </head>
 <body>
-    <h1>🌡️ IoT Temperatur Dashboard</h1>
-    <div class="temp" id="temp">--.- °C</div>
-    <p id="timestamp"></p>
+    <div class="container">
+        <!-- Hauptüberschrift mit Thermometer-Emoji -->
+        <h1>🌡️ IoT Temperatur Dashboard</h1>
+        
+        <!-- Temperaturanzeige - Wert wird per JavaScript aktualisiert -->
+        <div class="temp" id="temp">--.- °C</div>
+        
+        <!-- Zeitstempel - wann wurde die Temperatur gemessen -->
+        <p id="timestamp" class="timestamp"></p>
+        
+        <!-- Zusatzinfo: Bild wird automatisch aktualisiert -->
+        <p style="font-size: 12px; color: #666;">Aktualisiert alle 5 Sekunden</p>
+    </div>
+
     <script>
+        // ============================================
+        // JAVASCRIPT - LIVE DATEN ABRUFEN
+        // ============================================
+        
+        /**
+         * Lädt die aktuellste Temperatur vom Backend
+         * Verwendet die Fetch API für asynchrone HTTP-Anfragen
+         * 
+         * API Endpoint: GET /api/latest
+         * Response Format: 
+         * {
+         *   "device_id": "esp8266_...",
+         *   "temperature": 25.5,
+         *   "unit": "celsius",
+         *   "timestamp": "2026-04-24 10:30:00"
+         * }
+         */
         async function loadData() {
             try {
+                // ============================================
+                // 1. HTTP ANFRAGE SENDEN
+                // ============================================
+                // fetch() sendet eine GET-Anfrage an das Backend
+                // /api/latest liefert die aktuellste Temperatur
                 const response = await fetch('/api/latest');
+                
+                // ============================================
+                // 2. JSON ANTWORT PARSEN
+                // ============================================
+                // Die Antwort vom Server ist im JSON-Format
                 const data = await response.json();
+                
+                // ============================================
+                // 3. FEHLER PRÜFEN
+                // ============================================
+                // Wenn kein Fehler vorliegt (data.error ist falsy)
                 if (!data.error) {
-                    document.getElementById('temp').innerHTML = data.temperature + ' °C';
-                    document.getElementById('timestamp').innerHTML = new Date(data.timestamp).toLocaleString();
+                    // ============================================
+                    // 4. DOM AKTUALISIEREN (Seite aktualisieren)
+                    // ============================================
+                    
+                    // Temperatur-Element finden und neuen Wert setzen
+                    // toFixed(1) rundet auf eine Nachkommastelle
+                    document.getElementById('temp').innerHTML = data.temperature.toFixed(1) + ' °C';
+                    
+                    // Zeitstempel-Element finden und formatierte Zeit setzen
+                    // toLocaleString() formatiert das Datum nach lokaler Zeitzone
+                    const timestamp = new Date(data.timestamp);
+                    document.getElementById('timestamp').innerHTML = 
+                        'Letzte Messung: ' + timestamp.toLocaleString('de-DE');
+                } else {
+                    // Bei Fehler: Fehlermeldung in der Konsole
+                    console.error('API Fehler:', data.error);
                 }
             } catch (error) {
-                console.error('Fehler:', error);
+                // ============================================
+                // 5. FEHLERBEHANDLUNG (Netzwerkfehler, Server down, etc.)
+                // ============================================
+                console.error('Fehler beim Laden der Daten:', error);
+                
+                // Zeige Fehler in der Webseite an (optional)
+                document.getElementById('temp').innerHTML = '❌ Fehler';
+                document.getElementById('timestamp').innerHTML = 'Verbindungsproblem zum Server';
             }
         }
+        
+        // ============================================
+        // INITIALER AUFRUF
+        // ============================================
+        // Beim ersten Laden der Seite sofort die Temperatur holen
+        // Sonst müsste man 5 Sekunden auf die erste Aktualisierung warten
         loadData();
+        
+        // ============================================
+        // PERIODISCHES UPDATE (ALLE 5 SEKUNDEN)
+        // ============================================
+        // setInterval() ruft loadData() alle 5000 Millisekunden (5 Sekunden) auf
+        // So bleibt die Anzeige live und aktuell
         setInterval(loadData, 5000);
+        
+        // ============================================
+        // OPTIONAL: ZUSATZINFO IN DER KONSOLE
+        // ============================================
+        console.log('Dashboard gestartet - Aktualisiert alle 5 Sekunden');
     </script>
 </body>
 </html>

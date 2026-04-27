@@ -38,6 +38,8 @@ services:
     ports:
       - "1883:1883"      # MQTT (unverschlüsselt) - Für Provisioning & Bridge
       - "8883:8883"      # MQTTS (TLS verschlüsselt) - Für ESP8266 über WLAN
+      - "8084:8084"      # WSS (WebSocket Secure) für Browser
+      - "8085:8085"      # Neuer unverschlüsselter WS Port
     volumes:
       # Konfigurationsdatei (read-only für Sicherheit)
       - ./mosquitto/config:/mosquitto/config:ro

@@ -73,7 +73,9 @@ mosquitto/passwd/passwd_file
 mosquitto/passwd/*.db
 mosquitto/data/
 mosquitto/log/
-
+config.json
+*.env
+secrets/
 # ============================================
 # Datenbank
 # ============================================

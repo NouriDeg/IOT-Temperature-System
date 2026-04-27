@@ -215,7 +215,7 @@ docker-compose up -d
     Kompiliere und flashe auf ESP8266
 
 ## ⚙️ Konfiguration
-Mosquitto Konfiguration (mosquitto/config/mosquitto.conf)
+### Mosquitto Konfiguration (mosquitto/config/mosquitto.conf)
 conf
 
 listener 1883 0.0.0.0
@@ -230,7 +230,7 @@ require_certificate false
 
 password_file /mosquitto/passwd/passwd_file
 
-ESP8266 Konfiguration (main.ino)
+### ESP8266 Konfiguration (main.ino)
 cpp
 
 // WLAN
@@ -273,6 +273,26 @@ API Health Check	http://192.168.0.105:5000/api/health	Statusabfrage
 Datenbank Abfragen
 bash
 
+### Öffne die HTML WSS-Datei im Browser
+start "file:///C:/Users/User/Desktop/Ye_SIC/IOT-Temperature-System/wss-demo/html/wss-all-browser.html"
+
+Host: 192.168.0.105
+
+Port: 8084
+
+### WSS Über Python Client
+python wss_client_secure.py
+
+### WSS Über MQTT Explorer
+Protocol: ws://
+
+Host: 192.168.0.105
+
+Port: 8084
+
+TLS aktivieren (im Advanced)
+
+
 ### Letzte 10 Messungen
 docker exec postgres_db psql -U sensor_user -d sensordb -c "SELECT device_id, value, received_at FROM sensor_data ORDER BY id DESC LIMIT 10;"
 
@@ -293,6 +313,9 @@ docker exec postgres_db psql -U sensor_user -d sensordb -c "SELECT MIN(value) as
 
 ### Zeige Gerätestatus
 docker exec postgres_db psql -U sensor_user -d sensordb -c "SELECT * FROM device_status;"
+
+### Zeige 100 Sensor Daten
+docker exec postgres_db psql -U sensor_user -d sensordb -c "SELECT* from sensor_data ORDER BY id DESC LIMIT 100;"
 
 ### Zeige die Tabellenstruktur
 docker exec postgres_db psql -U sensor_user -d sensordb -c "\dt"

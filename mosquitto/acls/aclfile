@@ -1,17 +1,51 @@
+# ============================================
+# ACL (Access Control List) - Least-Privilege-Prinzip
+# ============================================
+# Jeder Benutzer bekommt nur die minimal nötigen Rechte
+
+# ------------------------------------------------------------
+# BRIDGE SERVICE (nur Leserechte fuer Sensordaten)
+# ------------------------------------------------------------
 user bridge_user
-topic read sensor/temperatur
 topic read sensor/#
 topic read status/+/online
 topic read lwt/+
 
+# ------------------------------------------------------------
+# PROVISIONER SERVICE
+# ------------------------------------------------------------
 user provisioner
 topic read provisioning/request
 topic write provisioning/response
 topic read provisioning/status
 topic write provisioning/status
 
+# ------------------------------------------------------------
+# TEST_DEVICE (vollständige Rechte f?r Tests)
+# ------------------------------------------------------------
 user test_device
+topic read #
+topic write #
+topic read /#
+topic read sensor/#
+topic write sensor/temperatur
+topic read status/+
+topic write status/+
+topic read lwt/+
+topic write lwt/+
+topic read test/#
+topic write test/#
+topic read commands/+
+topic write commands/+
+
+# ------------------------------------------------------------
+# DYNAMISCHE GERÄTE (für mehrere ESP8266 - Least Privilege)
+# ------------------------------------------------------------
+# Jedes Gerät darf nur auf seine eigenen Topics schreiben
+pattern read sensor/#
 pattern write sensor/temperatur
+pattern read status/%u/online
 pattern write status/%u/online
+pattern read lwt/%u
 pattern write lwt/%u
 pattern read commands/%u/ota

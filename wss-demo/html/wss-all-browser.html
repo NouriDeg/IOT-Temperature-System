@@ -1,0 +1,416 @@
+﻿<!DOCTYPE html>
+<!-- 
+    ============================================================
+    IoT WSS (WebSocket Secure) Test Client
+    ============================================================
+    Diese HTML-Datei stellt einen sicheren WSS-Client dar,
+    der sich mit einem MQTT Broker über verschlüsselte WebSockets verbindet.
+    
+    Sicherheitsmerkmal: Passwörter werden NICHT im Code gespeichert!
+    Der Benutzer muss das Passwort bei jeder Verbindung eingeben.
+    
+    Verwendung:
+    1. Öffnen im Browser (file:// oder über HTTPS)
+    2. Host, Port, Benutzername und Passwort eingeben
+    3. Auf "Verbinden" klicken
+    4. Temperaturdaten werden live angezeigt
+    
+    Autor: Nouri Deg
+    IoT Temperature Monitoring System
+    Datum: 24.04.2026 
+    ============================================================
+-->
+
+<html lang="de">
+<head>
+    <meta charset="UTF-8">                              <!-- Unterstützt deutsche Umlaute -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">  <!-- Responsive Design -->
+    <title>IoT WSS Test - Sicher</title>
+    
+    <style>
+        /* ============================================
+           CSS STYLES - Visuelles Design
+           ============================================ */
+        
+        /* Hauptstil für den gesamten Body */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);  /* Dunkler Verlauf */
+            color: white;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        /* Zentrierter Container für den Inhalt */
+        .container { 
+            max-width: 800px; 
+            margin: 0 auto; 
+        }
+        
+        /* Hauptüberschrift in Akzentfarbe */
+        h1 { 
+            color: #e94560; 
+            text-align: center; 
+        }
+        
+        /* Karten-Stil für alle Hauptkomponenten */
+        .config-card, .status-card, .messages-card {
+            background: #0f3460;      /* Dunkelblaue Karten */
+            border-radius: 10px;      /* Abgerundete Ecken */
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        /* Gruppe für Eingabefelder (nebeneinander) */
+        .input-group {
+            display: flex;
+            gap: 10px;                /* Abstand zwischen Elementen */
+            margin: 10px 0;
+        }
+        
+        /* Eingabefelder und Buttons */
+        input, button {
+            padding: 10px;
+            border-radius: 5px;
+            border: none;
+        }
+        
+        /* Eingabefelder */
+        input {
+            flex: 1;                  /* Nimmt verfügbaren Platz */
+            background: #16213e;
+            color: white;
+        }
+        
+        /* Buttons mit Akzentfarbe */
+        button {
+            background: #e94560;
+            color: white;
+            cursor: pointer;          /* Mauszeiger wird zur Hand */
+            transition: background 0.3s;  /* Sanfter Farbübergang */
+        }
+        
+        /* Button-Hover-Effekt */
+        button:hover { 
+            background: #ff6b8a; 
+        }
+        
+        /* Status-Farben */
+        .status-online { 
+            color: #4CAF50;           /* Grün für Online */
+            font-weight: bold; 
+        }
+        .status-offline { 
+            color: #f44336;           /* Rot für Offline */
+            font-weight: bold; 
+        }
+        
+        /* Nachrichten-Stil */
+        .message {
+            background: #16213e;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 10px;
+            border-left: 3px solid #e94560;  /* Akzentstreifen links */
+            font-size: 12px;
+            word-break: break-all;            /* Lange Wörter umbrechen */
+        }
+        
+        .message-time { 
+            color: #888; 
+            font-size: 0.8em; 
+        }
+        
+        .message-topic { 
+            color: #e94560; 
+            font-weight: bold; 
+        }
+        
+        /* Nachrichten-Bereich mit Scrollbar */
+        .messages-card { 
+            max-height: 400px; 
+            overflow-y: auto;         /* Vertikale Scrollbar bei Überlauf */
+        }
+        
+        /* Warnhinweis-Stil */
+        .warning { 
+            color: #FFC107; 
+            font-size: 12px; 
+            margin-top: 10px; 
+        }
+    </style>
+    
+    <!-- MQTT.js Bibliothek - für WebSocket MQTT Verbindungen -->
+    <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <h1>🌡️ IoT WSS Test - Sichere Verbindung</h1>
+        
+        <!-- ============================================
+             KONFIGURATIONS-BEREICH
+             Benutzereingaben für die Verbindung
+             ============================================ -->
+        <div class="config-card">
+            <h3>🔧 Verbindungseinstellungen</h3>
+            
+            <!-- Host und Port Eingabe -->
+            <div class="input-group">
+                <input type="text" id="host" placeholder="Host" value="192.168.0.105">
+                <input type="text" id="port" placeholder="Port" value="8084">
+            </div>
+            
+            <!-- Benutzername und Passwort Eingabe -->
+            <div class="input-group">
+                <input type="text" id="username" placeholder="Benutzername" value="test_device">
+                <!-- type="password" versteckt die Eingabe -->
+                <input type="password" id="password" placeholder="Passwort">
+            </div>
+            
+            <!-- Verbindungs-Buttons -->
+            <button onclick="connectWSS()">🔌 Verbinden</button>
+            <button onclick="disconnectWSS()">🔌 Trennen</button>
+            
+            <!-- Sicherheitshinweis -->
+            <div class="warning">⚠️ Passwort wird nicht gespeichert - bei jedem Seitenladen neu eingeben!</div>
+        </div>
+        
+        <!-- ============================================
+             STATUS-BEREICH
+             Zeigt den aktuellen Verbindungsstatus
+             ============================================ -->
+        <div class="status-card">
+            <h3>📡 Verbindungsstatus</h3>
+            <div id="status">Nicht verbunden</div>
+            <div id="client-id"></div>
+        </div>
+        
+        <!-- ============================================
+             NACHRICHTEN-BEREICH
+             Zeigt alle empfangenen MQTT Nachrichten
+             ============================================ -->
+        <div class="messages-card">
+            <h3>📨 Empfangene Nachrichten</h3>
+            <div id="messages"></div>
+        </div>
+        
+        <!-- ============================================
+             SENDEN-BEREICH
+             Zum Senden eigener MQTT Nachrichten
+             ============================================ -->
+        <div class="input-group">
+            <input type="text" id="topic-input" placeholder="Topic" value="test/command">
+            <input type="text" id="message-input" placeholder="Nachricht">
+            <button onclick="publishMessage()">📤 Senden</button>
+        </div>
+    </div>
+
+    <script>
+        // ============================================
+        // GLOBALE VARIABLEN
+        // ============================================
+        
+        let client = null;     // MQTT Client Objekt (initial null)
+        
+        // ============================================
+        // WSS VERBINDUNG AUFBAUEN
+        // ============================================
+        /**
+         * Stellt eine verschlüsselte WSS Verbindung zum MQTT Broker her
+         * Liest Host, Port, Benutzername und Passwort aus den Eingabefeldern
+         * Das Passwort wird NICHT im Code gespeichert!
+         */
+        function connectWSS() {
+            // Werte aus den Eingabefeldern lesen
+            const host = document.getElementById('host').value;
+            const port = document.getElementById('port').value;
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            // Sicherheitsprüfung: Passwort darf nicht leer sein
+            if (!password) {
+                alert('Bitte Passwort eingeben!');
+                return;
+            }
+            
+            // WSS URL zusammensetzen (WebSocket Secure)
+            const wssUrl = `wss://${host}:${port}`;
+            
+            // Status aktualisieren
+            updateStatus('🔄 Verbinde mit ' + wssUrl + '...', 'connecting');
+            
+            // MQTT Verbindungsoptionen
+            const options = {
+                username: username,                    // MQTT Benutzername
+                password: password,                    // MQTT Passwort (aus Eingabefeld)
+                clientId: 'web_' + Math.random().toString(16).substr(2, 8),  // Zufällige Client-ID
+                rejectUnauthorized: false,             // Akzeptiert selbstsignierte Zertifikate
+                connectTimeout: 10000                  // Timeout nach 10 Sekunden
+            };
+            
+            // MQTT Client erstellen und verbinden
+            client = mqtt.connect(wssUrl, options);
+            
+            // ============================================
+            // EVENT: VERBINDUNG ERFOLGREICH
+            // ============================================
+            client.on('connect', () => {
+                updateStatus('✅ Verbunden mit WSS Broker!', 'online');
+                document.getElementById('client-id').innerHTML = `Client ID: ${options.clientId}`;
+                
+                // Topics abonnieren (um Nachrichten zu empfangen)
+                client.subscribe('sensor/temperatur');      // Temperaturdaten
+                client.subscribe('status/+/online');        // Online-Status
+                client.subscribe('lwt/#');                  // Last Will Testament
+                client.subscribe('test/#');                 // Test-Topics
+                
+                // Systemnachricht in der Anzeige
+                addMessage('system', 'Verbunden und abonniert');
+                
+                // Testnachricht senden
+                client.publish('test/connection', 'Browser Client verbunden!');
+            });
+            
+            // ============================================
+            // EVENT: NACHRICHT EMPFANGEN
+            // ============================================
+            client.on('message', (topic, message) => {
+                // Nachricht als Text anzeigen
+                addMessage(topic, message.toString());
+                
+                // Versuche JSON zu parsen (für Temperaturdaten)
+                try {
+                    const data = JSON.parse(message.toString());
+                    if (data.temp) {
+                        // Spezielle Anzeige für Temperaturdaten
+                        addMessage(topic, `🌡️ Temperatur: ${data.temp}°C (${data.device_id})`);
+                    }
+                } catch(e) {
+                    // Kein JSON - ignoriere Parse-Fehler
+                }
+            });
+            
+            // ============================================
+            // EVENT: FEHLER AUFGETRETEN
+            // ============================================
+            client.on('error', (err) => {
+                updateStatus(`❌ Fehler: ${err.message}`, 'offline');
+                addMessage('error', err.message);
+            });
+            
+            // ============================================
+            // EVENT: VERBINDUNG GESCHLOSSEN
+            // ============================================
+            client.on('close', () => {
+                updateStatus('⚠️ Verbindung geschlossen', 'offline');
+            });
+        }
+        
+        // ============================================
+        // VERBINDUNG TRENNEN
+        // ============================================
+        /**
+         * Trennt die bestehende WSS Verbindung
+         * Setzt den Client zurück und aktualisiert den Status
+         */
+        function disconnectWSS() {
+            if (client) {
+                client.end();                    // Verbindung sauber beenden
+                client = null;                   // Client Objekt freigeben
+                updateStatus('🔌 Getrennt', 'offline');
+                addMessage('system', 'Manuell getrennt');
+            }
+        }
+        
+        // ============================================
+        // STATUS AKTUALISIEREN
+        // ============================================
+        /**
+         * Aktualisiert die Status-Anzeige mit Farbe und Text
+         * @param {string} message - Die anzuzeigende Statusmeldung
+         * @param {string} state - 'online', 'offline' oder 'connecting'
+         */
+        function updateStatus(message, state) {
+            const statusDiv = document.getElementById('status');
+            statusDiv.innerHTML = message;
+            
+            // CSS Klasse für Farbgebung setzen
+            statusDiv.className = state === 'online' ? 'status-online' : 
+                                 state === 'offline' ? 'status-offline' : '';
+        }
+        
+        // ============================================
+        // NACHRICHT HINZUFÜGEN
+        // ============================================
+        /**
+         * Fügt eine neue Nachricht zur Anzeige hinzu
+         * @param {string} topic - MQTT Topic der Nachricht
+         * @param {string} message - Der Nachrichteninhalt
+         */
+        function addMessage(topic, message) {
+            const messagesDiv = document.getElementById('messages');
+            const msgDiv = document.createElement('div');
+            msgDiv.className = 'message';
+            
+            // Aktuelle Zeit im Format HH:MM:SS
+            const time = new Date().toLocaleTimeString();
+            
+            // Nachricht als HTML einfügen (mit Escape für Sicherheit)
+            msgDiv.innerHTML = `
+                <div class="message-time">${time}</div>
+                <div class="message-topic">${escapeHtml(topic)}</div>
+                <div>${escapeHtml(message.substring(0, 200))}</div>
+            `;
+            
+            // Neue Nachricht am Anfang einfügen
+            messagesDiv.insertBefore(msgDiv, messagesDiv.firstChild);
+            
+            // Begrenzung: max. 100 Nachrichten (sonst zu langsam)
+            while (messagesDiv.children.length > 100) {
+                messagesDiv.removeChild(messagesDiv.lastChild);
+            }
+        }
+        
+        // ============================================
+        // NACHRICHT SENDEN
+        // ============================================
+        /**
+         * Sendet eine benutzerdefinierte MQTT Nachricht
+         * Liest Topic und Nachricht aus den Eingabefeldern
+         */
+        function publishMessage() {
+            // Prüfen ob verbunden
+            if (!client || !client.connected) {
+                alert('Nicht verbunden!');
+                return;
+            }
+            
+            // Werte aus Eingabefeldern lesen
+            const topic = document.getElementById('topic-input').value;
+            const message = document.getElementById('message-input').value;
+            
+            if (topic && message) {
+                client.publish(topic, message);          // Nachricht senden
+                addMessage(topic, `📤 GESENDET: ${message}`);  // In Anzeige zeigen
+                document.getElementById('message-input').value = '';  // Eingabefeld leeren
+            }
+        }
+        
+        // ============================================
+        // HTML ESCAPE (Sicherheit)
+        // ============================================
+        /**
+         * Konvertiert Sonderzeichen in HTML-Entities
+         * Verhindert XSS (Cross-Site Scripting) Angriffe
+         * @param {string} text - Der zu escapende Text
+         * @returns {string} - Escapeter Text
+         */
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;          // Automatisches HTML-Escaping
+            return div.innerHTML;
+        }
+    </script>
+</body>
+</html>

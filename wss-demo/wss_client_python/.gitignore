@@ -1,0 +1,17 @@
+﻿# Secrets - NICHT auf GitHub!
+.env
+*.env
+*.env.local
+*.env.production
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+config.json
+*.env
+secrets/
