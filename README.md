@@ -61,6 +61,14 @@ Das System ermöglicht die automatische Erfassung, Übertragung und Visualisieru
     <p><em>Sequenzdiagramm mit allen Schnittstellen</em></p>
 </div>
 
+## Klassendiagramm:Provisioning.h
+
+<div align="center">
+    <img src="docs/Architektur_UML/images/Klassendiagramm_provisioning_h1.svg" alt="Klassendiagramm" width="90%">
+    <p><em>Klassendiagramm: Provisioning</em></p>
+</div>
+
+
 ## Technologie-Stack
 
 Komponente	Technologie	Version	Port
@@ -245,6 +253,16 @@ IPAddress subnet(255, 255, 255, 0);
 // Provisioning Service
 const char* PROVISIONING_HOST = "192.168.0.105";
 const int PROVISIONING_PORT = 1883;
+
+// ============================================================================================
+// 6. CREDENTIALS IN STRUKTUR SPEICHERN: in Provisioning.h soll dieser Teil (IP und Port) angepasst werden.
+// ============================================================================================
+        strlcpy(creds.device_id, device_id.c_str(), sizeof(creds.device_id));
+        strlcpy(creds.mqtt_broker, doc["mqtt_broker"] | "192.168.0.105", sizeof(creds.mqtt_broker));
+        creds.mqtt_port = doc["mqtt_port"] | 8883;
+        strlcpy(creds.mqtt_user, doc["mqtt_username"] | "", sizeof(creds.mqtt_user));
+        strlcpy(creds.mqtt_password, doc["mqtt_password"] | "", sizeof(creds.mqtt_password));
+
 
 ## 🔧 Betrieb
 Container Management
