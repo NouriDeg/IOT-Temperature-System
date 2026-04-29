@@ -181,7 +181,7 @@ public:
      * @return false = Provisioning fehlgeschlagen
      */
     bool provision() {
-        Serial.println("\n🔐 Starte Provisioning Prozess...");
+        Serial.println("\n Starte Provisioning Prozess...");
         
         // =====================================================================
         // 1. GERÄTE-INFORMATIONEN AUSGEBEN
@@ -215,11 +215,11 @@ public:
         }
         
         if (!mqttClient.connected()) {
-            Serial.println("❌ Provisioning MQTT Verbindung fehlgeschlagen!");
+            Serial.println("Provisioning MQTT Verbindung fehlgeschlagen!");
             return false;
         }
         
-        Serial.println("   ✅ Temporäre MQTT Verbindung hergestellt");
+        Serial.println("   Temporäre MQTT Verbindung hergestellt");
         
         // =====================================================================
         // 3. PROVISIONING REQUEST SENDEN
@@ -253,7 +253,7 @@ public:
         mqttClient.disconnect();                    // Temporäre Verbindung trennen
         
         if (!provisioningComplete) {
-            Serial.println("❌ Keine Provisioning Response erhalten!");
+            Serial.println(" Keine Provisioning Response erhalten!");
             return false;
         }
         
@@ -272,7 +272,7 @@ public:
         // Status prüfen
         const char* status = doc["status"];
         if (strcmp(status, "success") != 0) {
-            Serial.print("❌ Provisioning Status: ");
+            Serial.print(" Provisioning Status: ");
             Serial.println(status);
             return false;
         }
@@ -336,11 +336,11 @@ public:
      * Nach dem Reset muss das Gerät neu provisioniert werden.
      */
     void factoryReset() {
-        Serial.println("🔄 Factory Reset wird durchgeführt...");
+        Serial.println(" Factory Reset wird durchgeführt...");
         creds.isProvisioned = false;            // Flag löschen
         memset(&creds, 0, sizeof(creds));       // gesamte Struktur mit Nullen füllen
         saveCredentials();                      // Geleerte Struktur speichern
-        Serial.println("✅ Factory Reset abgeschlossen. Neustart...");
+        Serial.println(" Factory Reset abgeschlossen. Neustart...");
         delay(1000);
         ESP.restart();                          // ESP8266 neu starten
     }

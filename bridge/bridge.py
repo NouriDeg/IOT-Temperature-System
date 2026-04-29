@@ -8,6 +8,8 @@ ZEITZONE: Europe/Berlin (CET/CEST)
 - Empfängt Daten vom ESP8266 über MQTT
 - Speichert Temperaturdaten in sensor_data Tabelle
 - Aktualisiert Gerätestatus in device_status Tabelle
+- Verarbeitet Heartbeat Nachrichten (status/+/online)
+- Verarbeitet LWT Nachrichten (lwt/+)
 """
 
 import paho.mqtt.client as mqtt
@@ -36,7 +38,7 @@ MQTT_HOST = os.getenv('MQTT_HOST', 'mosquitto')
 MQTT_PORT = int(os.getenv('MQTT_PORT', 1883))
 MQTT_USER = os.getenv('MQTT_BRIDGE_USER', 'bridge_user')
 MQTT_PASSWORD = os.getenv('MQTT_BRIDGE_PASSWORD', '')
-MQTT_TOPICS = ["sensor/temperatur", "sensor/#"]  # Zu abonnierende Topics
+MQTT_TOPICS = ["sensor/temperatur", "sensor/#", "status/#", "lwt/#"]  # Heartbeat & LWT dazu!
 
 # ==========================================
 # 3. POSTGRESQL KONFIGURATION
@@ -116,24 +118,15 @@ class DatabaseManager:
                 host=DB_HOST, port=DB_PORT, database=DB_NAME,
                 user=DB_USER, password=DB_PASSWORD
             )
-            logger.info(" PostgreSQL verbunden (Europe/Berlin Zeitzone)")
+            logger.info("✅ PostgreSQL verbunden (Europe/Berlin Zeitzone)")
         except Exception as e:
-            logger.error(f" DB Fehler: {e}")
+            logger.error(f"❌ DB Fehler: {e}")
             raise
     
     def insert_sensor_data(self, payload):
         """
         Speichert Sensordaten in der sensor_data Tabelle.
         Verwendet die lokale Berliner Zeit für received_at.
-        
-        Tabellenstruktur:
-        - device_id: Gerätekennung
-        - device_type: Gerätetyp (esp8266)
-        - sensor_type: Sensortyp (max6675)
-        - value: Temperaturwert
-        - unit: Einheit (celsius)
-        - raw_payload: Vollständiges JSON
-        - received_at: Zeitstempel in lokaler Zeit
         """
         try:
             with self.conn.cursor() as cur:
@@ -149,9 +142,7 @@ class DatabaseManager:
                 rssi = payload.get('rssi')
                 heap = payload.get('heap')
                 
-                # ==========================================
-                # WICHTIG: Verwende lokale Berliner Zeit!
-                # ==========================================
+                # Lokale Berliner Zeit
                 local_received_at = get_local_now()
                 
                 # INSERT in sensor_data Tabelle
@@ -161,38 +152,76 @@ class DatabaseManager:
                     VALUES (%s, %s, %s, %s, %s, %s, %s)
                 """, (device_id, device_type, sensor_type, value, unit, raw_payload, local_received_at))
                 
-                # ==========================================
-                # UPDATE device_status Tabelle
-                # ==========================================
-                cur.execute("""
-                    INSERT INTO device_status (device_id, status, last_seen, last_rssi, last_free_heap, updated_at)
-                    VALUES (%s, 'online', %s, %s, %s, %s)
-                    ON CONFLICT (device_id) DO UPDATE SET
-                        status = 'online',
-                        last_seen = EXCLUDED.last_seen,
-                        last_rssi = COALESCE(EXCLUDED.last_rssi, device_status.last_rssi),
-                        last_free_heap = COALESCE(EXCLUDED.last_free_heap, device_status.last_free_heap),
-                        updated_at = EXCLUDED.updated_at
-                """, (device_id, local_received_at, rssi, heap, local_received_at))
+                # UPDATE device_status Tabelle (durch Temperaturdaten)
+                self._update_device_status(device_id, 'online', local_received_at, rssi, heap)
                 
                 self.conn.commit()
                 
-                # Formatiere die lokale Zeit für das Log
                 time_str = local_received_at.strftime('%Y-%m-%d %H:%M:%S')
-                logger.info(f" Gespeichert: {device_id} -> {value}°C (Berlin: {time_str})")
+                logger.info(f"✅ Gespeichert: {device_id} -> {value}°C (Berlin: {time_str})")
                 
         except Exception as e:
             self.conn.rollback()
-            logger.error(f" Insert Fehler: {e}")
+            logger.error(f"❌ Insert Fehler: {e}")
     
-    def update_device_status(self, device_id, status='online', rssi=None, heap=None):
+    def update_heartbeat(self, device_id, status):
         """
-        Aktualisiert den Status eines Geräts in der device_status Tabelle
-        Verwendet lokale Berliner Zeit
+        Verarbeitet Heartbeat Nachrichten (status/+/online)
+        Aktualisiert last_seen und status in device_status
         """
         try:
             with self.conn.cursor() as cur:
                 local_now = get_local_now()
+                online_status = (status == 'true' or status == True)
+                status_text = 'online' if online_status else 'offline'
+                
+                cur.execute("""
+                    INSERT INTO device_status (device_id, status, last_seen, updated_at)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (device_id) DO UPDATE SET
+                        status = EXCLUDED.status,
+                        last_seen = EXCLUDED.last_seen,
+                        updated_at = EXCLUDED.updated_at
+                """, (device_id, status_text, local_now, local_now))
+                
+                self.conn.commit()
+                logger.info(f" Heartbeat: {device_id} -> {status_text} (Berlin: {local_now.strftime('%H:%M:%S')})")
+                
+        except Exception as e:
+            self.conn.rollback()
+            logger.error(f"❌ Heartbeat Fehler: {e}")
+    
+    def update_lwt(self, device_id, payload):
+        """
+        Verarbeitet LWT (Last Will Testament) Nachrichten
+        """
+        try:
+            with self.conn.cursor() as cur:
+                local_now = get_local_now()
+                status = payload.get('status', 'offline')
+                
+                cur.execute("""
+                    INSERT INTO device_status (device_id, status, last_seen, updated_at)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (device_id) DO UPDATE SET
+                        status = EXCLUDED.status,
+                        last_seen = EXCLUDED.last_seen,
+                        updated_at = EXCLUDED.updated_at
+                """, (device_id, status, local_now, local_now))
+                
+                self.conn.commit()
+                logger.info(f"⚠️ LWT: {device_id} -> {status}")
+                
+        except Exception as e:
+            self.conn.rollback()
+            logger.error(f"❌ LWT Fehler: {e}")
+    
+    def _update_device_status(self, device_id, status, timestamp, rssi=None, heap=None):
+        """
+        Interne Methode zum Aktualisieren des Gerätestatus
+        """
+        try:
+            with self.conn.cursor() as cur:
                 cur.execute("""
                     INSERT INTO device_status (device_id, status, last_seen, last_rssi, last_free_heap, updated_at)
                     VALUES (%s, %s, %s, %s, %s, %s)
@@ -202,11 +231,10 @@ class DatabaseManager:
                         last_rssi = COALESCE(EXCLUDED.last_rssi, device_status.last_rssi),
                         last_free_heap = COALESCE(EXCLUDED.last_free_heap, device_status.last_free_heap),
                         updated_at = EXCLUDED.updated_at
-                """, (device_id, status, local_now, rssi, heap, local_now))
-                self.conn.commit()
-                logger.info(f" Status aktualisiert: {device_id} -> {status} ")
+                """, (device_id, status, timestamp, rssi, heap, timestamp))
         except Exception as e:
-            logger.error(f" Status Update Fehler: {e} ")
+            logger.error(f"❌ Status Update Fehler: {e}")
+            raise
     
     def close(self):
         """Schließt die Datenbankverbindung"""
@@ -221,7 +249,10 @@ class MQTTBridge:
     """
     MQTT Bridge Service
     Empfängt MQTT Nachrichten, validiert sie und speichert sie in PostgreSQL
-    Alle Zeitstempel werden in lokaler Berliner Zeit (CET/CEST) gespeichert
+    Unterstützt:
+    - Temperaturdaten (sensor/temperatur)
+    - Heartbeat (status/+/online)
+    - LWT Nachrichten (lwt/+)
     """
     
     def __init__(self):
@@ -236,8 +267,8 @@ class MQTTBridge:
         self.mqtt_client.on_message = self.on_message
         self.mqtt_client.connect(MQTT_HOST, MQTT_PORT, 60)
         self.mqtt_client.loop_start()
-        logger.info(f" MQTT Bridge gestartet ({MQTT_HOST}:{MQTT_PORT}) ")
-        logger.info(f" Zeitzone: Europe/Berlin (CET/CEST) ")
+        logger.info(f" MQTT Bridge gestartet ({MQTT_HOST}:{MQTT_PORT})")
+        logger.info(f" Zeitzone: Europe/Berlin (CET/CEST)")
     
     def on_connect(self, client, userdata, flags, rc):
         """
@@ -245,45 +276,89 @@ class MQTTBridge:
         Abonniert alle konfigurierten Topics
         """
         if rc == 0:
-            logger.info(" MQTT verbunden ")
+            logger.info("✅ MQTT verbunden")
             for topic in MQTT_TOPICS:
                 client.subscribe(topic)
-                logger.info(f"   Abonniert: {topic}")
+                logger.info(f"  Abonniert: {topic}")
         else:
-            logger.error(f" MQTT Fehler (rc={rc})")
+            logger.error(f"❌ MQTT Fehler (rc={rc})")
     
     def on_message(self, client, userdata, msg):
         """
         Callback wenn eine MQTT Nachricht empfangen wird
-        Verarbeitet und speichert die Sensordaten
+        Verarbeitet je nach Topic verschiedene Nachrichtentypen:
+        - sensor/temperatur: Temperaturdaten (mit JSON Validierung)
+        - status/+/online: Heartbeat Nachrichten
+        - lwt/+: Last Will Testament Nachrichten
         """
+        topic = msg.topic
+        topic_parts = topic.split('/')
+        
         try:
-            # JSON Payload parsen
-            payload = json.loads(msg.payload.decode())
-            device_id = payload.get('device_id', 'unknown')
-            logger.info(f" Empfangen von {msg.topic}: {device_id}")
-            
-            # JSON Schema Validierung
-            try:
-                validate(instance=payload, schema=SENSOR_SCHEMA)
-            except ValidationError as e:
-                logger.error(f" Schema Fehler: {e.message}")
+            # ==========================================
+            # 1. HEARTBEAT NACHRICHTEN (status/+/online)
+            # ==========================================
+            if topic.startswith("status/") and topic.endswith("/online"):
+                # Extrahiere device_id aus Topic: status/esp8266_xxx/online
+                device_id = topic_parts[1]
+                status = msg.payload.decode()
+                
+                logger.info(f" Heartbeat empfangen: {device_id} -> {status}")
+                self.db.update_heartbeat(device_id, status)
                 return
             
-            # Daten in PostgreSQL speichern (mit lokaler Zeit)
-            self.db.insert_sensor_data(payload)
+            # ==========================================
+            # 2. LWT NACHRICHTEN (lwt/+)
+            # ==========================================
+            if topic.startswith("lwt/"):
+                # Extrahiere device_id aus Topic: lwt/esp8266_xxx
+                device_id = topic_parts[1]
+                
+                try:
+                    payload = json.loads(msg.payload.decode())
+                except:
+                    payload = {"status": msg.payload.decode()}
+                
+                logger.info(f"⚠️ LWT empfangen: {device_id} -> {payload}")
+                self.db.update_lwt(device_id, payload)
+                return
+            
+            # ==========================================
+            # 3. SENSOR DATEN (sensor/temperatur)
+            # ==========================================
+            if topic == "sensor/temperatur" or topic.startswith("sensor/"):
+                # JSON Payload parsen
+                payload = json.loads(msg.payload.decode())
+                device_id = payload.get('device_id', 'unknown')
+                logger.info(f" Empfangen von {topic}: {device_id}")
+                
+                # JSON Schema Validierung
+                try:
+                    validate(instance=payload, schema=SENSOR_SCHEMA)
+                except ValidationError as e:
+                    logger.error(f"❌ Schema Fehler: {e.message}")
+                    return
+                
+                # Daten in PostgreSQL speichern
+                self.db.insert_sensor_data(payload)
+                return
+            
+            # ==========================================
+            # 4. UNBEKANNTE TOPICS
+            # ==========================================
+            logger.warning(f"⚠️ Unbekanntes Topic: {topic} - wird ignoriert")
             
         except json.JSONDecodeError as e:
-            logger.error(f" JSON Parse Fehler: {e}")
+            logger.error(f"❌ JSON Parse Fehler: {e}")
         except Exception as e:
-            logger.error(f" Allgemeiner Fehler: {e}")
+            logger.error(f"❌ Allgemeiner Fehler: {e}")
     
     def stop(self):
         """Stoppt die Bridge sauber"""
         self.mqtt_client.loop_stop()
         self.mqtt_client.disconnect()
         self.db.close()
-        logger.info("Bridge gestoppt")
+        logger.info(" Bridge gestoppt")
 
 # ==========================================
 # 9. MAIN
@@ -302,4 +377,4 @@ if __name__ == "__main__":
             time.sleep(1)
     except KeyboardInterrupt:
         logger.info(" Bridge wird gestoppt...")
-        bridge.stop()
+########################################################################################################

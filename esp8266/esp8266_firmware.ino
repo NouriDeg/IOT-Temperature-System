@@ -1,11 +1,11 @@
 // ============================================
 // ESP8266 MAX6675 IoT Sensor
-// MIT ADAFRUIT SLEEPYDOG WATCHDOG, OTA and LWT
+// MIT ADAFRUIT SLEEPYDOG WATCHDOG, LWT & OTA
 // ============================================
 //
 // Projekt: IoT Temperature Monitoring System
 // Autor: Nouri Deg.
-// Datum: 20.04.2026 
+// Datum: 2026-04-20
 // Version: 5.0
 //
 // Funktionen:
@@ -445,7 +445,7 @@ void connectMQTT() {
 
     // Verbinde mit Device ID, Benutzername und Passwort
     if (mqttClient.connect(device_id.c_str(), mqttUser.c_str(), mqttPassword.c_str())) {
-      Serial.println("✅ verbunden!");
+      Serial.println(" verbunden!!!");
       isOnline = true;
       lastHeartbeat = millis();
 
@@ -807,7 +807,7 @@ void setup() {
   // Geräteinformationen ausgeben
   setupDeviceInfo();
 
-  // OTA Updates initialisieren 
+  // OTA Updates initialisieren
   setupOTA();
 
   // Gespeicherte Credentials laden oder neues Provisioning starten
@@ -856,16 +856,15 @@ void setup() {
 
   // Fertig! System läuft.
   Serial.println("\n✅ System bereit!");
-  Serial.println("📌 Befehle: RESET, STATUS, INFO, OFFLINE, WATCHDOG");
-  Serial.println("📌 OTA: Arduino IDE -> Werkzeuge -> Port -> Netzwerkport");
+  Serial.println(" Befehle: RESET, STATUS, INFO, OFFLINE, WATCHDOG");
+  Serial.println(" OTA: Arduino IDE -> Werkzeuge -> Port -> Netzwerkport");
 }
 
 // ============================================
 // 22. LOOP
 // ============================================
-// Hauptprogramm: läuft endlos
+// Hauptprogramm - läuft endlos
 // ============================================
-
 void loop() {
   // ============================================
   // WATCHDOG ZURÜCKSETZEN (FÜTTERN)
@@ -877,20 +876,20 @@ void loop() {
   // ============================================
   feedWatchdog();  // Watchdog füttern
 
-// ============================================
+// ================================================================
 // ARDUINO OTA HANDLE
-// ============================================
+// ================================================================
 // Muss regelmäßig aufgerufen werden damit OTA Updates funktionieren
-// ============================================
+// ================================================================
 #if OTA_AVAILABLE
   if (!otaInProgress) {
     ArduinoOTA.handle();
   }
 #endif
 
-  // ============================================
+  // ============================================================
   // SERIELLE KOMMANDOS
-  // ============================================
+  // =============================================================
   // Verarbeitet Befehle wie RESET, STATUS, INFO, OFFLINE, WATCHDOG
   // ============================================
   handleSerialCommands();
@@ -911,7 +910,7 @@ void loop() {
   // Sendet periodisch Heartbeat und prüft auf Timeout
   // ============================================
   publishOnlineStatus();  // Heartbeat alle 30 Sekunden
-  checkLWTTimeout();      // Prüft ob Heartbeat-Timeout (90 Sekunden)
+  checkLWTTimeout(); // Prüft ob Heartbeat-Timeout (90 Sekunden)
 
   // ============================================
   // TEMPERATUR SENDEN

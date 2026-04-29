@@ -5,6 +5,7 @@
 # Dieses File definiert alle Container des Systems:
 # - Mosquitto MQTT Broker (mit TLS und Authentifizierung)
 # - PostgreSQL Datenbank (mit Healthcheck)
+# - pgAdmin4 (Datenbank Verwaltung)
 # - Bridge Service (MQTT → PostgreSQL)
 # - Provisioning Service (automatisches Geräte-Onboarding)
 # - Backend API (Flask Dashboard)
@@ -102,7 +103,42 @@ services:
       - no-new-privileges:true
 
   # ============================================
-  # 3. BRIDGE SERVICE (MQTT → PostgreSQL)
+  # 3. PGADMIN4 (Datenbank Verwaltung)
+  # ============================================
+  # Grafische Oberfläche für PostgreSQL Datenbank
+  # - Ermöglicht einfache Datenbankverwaltung
+  # - SQL Editor für Abfragen
+  # - Tabellenstruktur visualisieren
+  # - Backup und Restore Funktionen
+  # ============================================
+  pgadmin:
+    image: dpage/pgadmin4:latest                    # Offizielles pgAdmin4 Image
+    container_name: pgadmin                         # Fester Container-Name
+    environment:
+      # Zugangsdaten für pgAdmin Webinterface (aus .env Datei)
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}       # Login E-Mail (aus .env)
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD} # Login Passwort (aus .env)
+      PGADMIN_CONFIG_SERVER_MODE: 'False'           # Einzelbenutzer-Modus
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: 'False'  # Kein Master-Passwort
+    ports:
+      - "5050:80"          # pgAdmin Webinterface Port
+    volumes:
+      # Persistente Speicherung für Server-Konfigurationen
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - iot_network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ============================================
+  # 4. BRIDGE SERVICE (MQTT → PostgreSQL)
   # ============================================
   # Empfängt MQTT Nachrichten und speichert sie in PostgreSQL
   # - Abonniert sensor/temperatur Topic
@@ -143,7 +179,7 @@ services:
         max-file: "3"                                # Anzahl der Log-Dateien
 
   # ============================================
-  # 4. PROVISIONING SERVICE (Geräte-Onboarding)
+  # 5. PROVISIONING SERVICE (Geräte-Onboarding)
   # ============================================
   # Automatische Registrierung neuer ESP8266 Geräte
   # - Empfängt Provisioning Requests von neuen Geräten
@@ -187,7 +223,7 @@ services:
         max-file: "3"
 
   # ============================================
-  # 5. BACKEND API (Flask Dashboard)
+  # 6. BACKEND API (Flask Dashboard)
   # ============================================
   # REST API und Web Dashboard
   # - Zeigt Live-Dashboard mit Chart.js
@@ -223,7 +259,7 @@ services:
         max-file: "3"
 
   # ============================================
-  # 6. FRONTEND (Nginx - statisches Dashboard)
+  # 7. FRONTEND (Nginx - statisches Dashboard)
   # ============================================
   # Alternatives statisches Web Dashboard
   # - Dient als Fallback oder für einfache Visualisierung
@@ -255,6 +291,9 @@ services:
 volumes:
   postgres_data:            # PostgreSQL Datenbankdateien
     name: iot_postgres_data
+    driver: local
+  pgadmin_data:             # pgAdmin Konfigurationen
+    name: iot_pgadmin_data
     driver: local
 
 # ============================================
