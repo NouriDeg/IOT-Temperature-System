@@ -757,7 +757,7 @@ void handleSerialCommands() {
     }
     // Offline simulieren (für LWT Test)
     else if (cmd == "OFFLINE") {
-      Serial.println("🔌 Simuliere Offline...");
+      Serial.println(" Simuliere Offline...");
       isOnline = false;
       String onlineTopic = "status/" + device_id + "/online";
       mqttClient.publish(onlineTopic.c_str(), "false", true);

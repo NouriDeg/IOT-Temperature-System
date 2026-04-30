@@ -23,6 +23,17 @@ CREATE TABLE IF NOT EXISTS device_status (
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- devices Tabelle (für Provisioning)
+CREATE TABLE IF NOT EXISTS devices (
+    id SERIAL PRIMARY KEY,
+    device_id VARCHAR(64) UNIQUE NOT NULL,
+    mac_address VARCHAR(17) UNIQUE NOT NULL,
+    mqtt_username VARCHAR(64) UNIQUE,
+    mqtt_password_hash VARCHAR(255),
+    status VARCHAR(20) DEFAULT 'pending',
+    provisioned_at TIMESTAMPTZ DEFAULT NOW()
+);
+
 -- Indizes
 CREATE INDEX idx_sensor_data_device_time ON sensor_data(device_id, received_at DESC);
 CREATE INDEX idx_sensor_data_type ON sensor_data(sensor_type, received_at DESC);

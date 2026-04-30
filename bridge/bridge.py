@@ -118,9 +118,9 @@ class DatabaseManager:
                 host=DB_HOST, port=DB_PORT, database=DB_NAME,
                 user=DB_USER, password=DB_PASSWORD
             )
-            logger.info("✅ PostgreSQL verbunden (Europe/Berlin Zeitzone)")
+            logger.info(" PostgreSQL verbunden (Europe/Berlin Zeitzone)")
         except Exception as e:
-            logger.error(f"❌ DB Fehler: {e}")
+            logger.error(f" DB Fehler: {e}")
             raise
     
     def insert_sensor_data(self, payload):
@@ -158,11 +158,11 @@ class DatabaseManager:
                 self.conn.commit()
                 
                 time_str = local_received_at.strftime('%Y-%m-%d %H:%M:%S')
-                logger.info(f"✅ Gespeichert: {device_id} -> {value}°C (Berlin: {time_str})")
+                logger.info(f" Gespeichert: {device_id} -> {value}°C (Berlin: {time_str})")
                 
         except Exception as e:
             self.conn.rollback()
-            logger.error(f"❌ Insert Fehler: {e}")
+            logger.error(f" Insert Fehler: {e}")
     
     def update_heartbeat(self, device_id, status):
         """
@@ -210,7 +210,7 @@ class DatabaseManager:
                 """, (device_id, status, local_now, local_now))
                 
                 self.conn.commit()
-                logger.info(f"⚠️ LWT: {device_id} -> {status}")
+                logger.info(f"  LWT: {device_id} -> {status}")
                 
         except Exception as e:
             self.conn.rollback()
@@ -319,7 +319,7 @@ class MQTTBridge:
                 except:
                     payload = {"status": msg.payload.decode()}
                 
-                logger.info(f"⚠️ LWT empfangen: {device_id} -> {payload}")
+                logger.info(f"  LWT empfangen: {device_id} -> {payload}")
                 self.db.update_lwt(device_id, payload)
                 return
             
@@ -346,7 +346,7 @@ class MQTTBridge:
             # ==========================================
             # 4. UNBEKANNTE TOPICS
             # ==========================================
-            logger.warning(f"⚠️ Unbekanntes Topic: {topic} - wird ignoriert")
+            logger.warning(f" Unbekanntes Topic: {topic} - wird ignoriert")
             
         except json.JSONDecodeError as e:
             logger.error(f"❌ JSON Parse Fehler: {e}")

@@ -119,11 +119,11 @@ def on_message(client, userdata, msg):
             logger.info(f"🌡️ {temp}°C von {device_id}")
         else:
             # Andere Nachrichten (Status, LWT, etc.)
-            logger.info(f"📨 {msg.topic}: {json.dumps(payload, ensure_ascii=False)}")
+            logger.info(f" {msg.topic}: {json.dumps(payload, ensure_ascii=False)}")
             
     except json.JSONDecodeError:
         # Fallback: Nachricht ist kein JSON - zeige als einfachen Text an
-        logger.info(f"📨 {msg.topic}: {msg.payload.decode()}")
+        logger.info(f" {msg.topic}: {msg.payload.decode()}")
 
 # =============================================================================
 # HAUPTFUNKTION
@@ -174,7 +174,7 @@ def main():
         logger.info("✅ TLS mit Zertifikatsprüfung aktiviert")
     else:
         # Fallback: Keine Zertifikatsprüfung (nur für Entwicklung!)
-        logger.warning(f"⚠️ CA Zertifikat nicht gefunden: {CA_CERT_PATH}")
+        logger.warning(f" CA Zertifikat nicht gefunden: {CA_CERT_PATH}")
         logger.warning("   Verbindung ohne Zertifikatsprüfung (unsicher!)")
         client.tls_set(cert_reqs=ssl.CERT_NONE)    # Keine Zertifikatsprüfung
         client.tls_insecure_set(True)              # Akzeptiere alle Zertifikate
