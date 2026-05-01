@@ -1,63 +1,102 @@
 # ============================================================================
-# DOCKER COMPOSE KONFIGURATION - IoT TEMPERATURE MONITORING SYSTEM
+# DOCKER COMPOSE KONFIGURATION - 3-ZONEN-SICHERHEITSARCHITEKTUR
 # ============================================================================
 # 
-# Version: 3.0 (Stable)
-# Datum: 2026-04-30
+# Version: 4.0 (Security Enhanced)
+# Datum: 30.04.2026
+# Autor: Nouri Deg.
+
+# Diese Konfiguration implementiert eine professionelle Sicherheitsarchitektur
+# mit drei Netzwerk-Zonen (DMZ, Internal, Database) nach dem Least-Privilege-Prinzip.
 # 
-# Diese Konfiguration definiert alle Container für das IoT Temperature Monitoring System.
-# Es wird ein gemeinsames Netzwerk (iot_network) verwendet, das stabil und einfach zu verwalten ist.
+# NETZWERKARCHITEKTUR:
 # 
-# Enthaltene Services:
-# 1. mosquitto   - MQTT Broker für Kommunikation
-# 2. postgres    - PostgreSQL Datenbank für persistente Speicherung
-# 3. backend     - Flask REST API (Backend)
-# 4. frontend    - Nginx Static Webserver (Frontend Dashboard)
-# 5. bridge      - MQTT Bridge (Python) - verbindet MQTT mit PostgreSQL
-# 6. provisioner - Provisioning Service (Python) - automatisches Geräte-Onboarding
-# 7. pgadmin     - pgAdmin4 Datenbankverwaltung (nur Entwicklung, mit --profile dev)
+#   DMZ NETZWERK (Public) - Von außen erreichbare Services                 
+#   - frontend (Port 8080): Web Dashboard                                  
+#   - backend (Port 5000): REST API                                        
+#   - mosquitto (Ports 1883,8883,8084,8085): MQTT Broker                  
 # 
-# Sicherheit:
-# - Alle Secrets in .env Datei (nicht in dieser Datei!)
-# - Read-only Volumes wo möglich
+#                                    │
+#                                    ▼ (nur erlaubte Kommunikation)
+# 
+#   INTERNAL NETZWERK (Backend) - Kein externer Zugriff!                   
+#   - bridge: MQTT → PostgreSQL Übersetzer                                 
+#   - provisioner: Automatisches Geräte-Onboarding                         
+# 
+#                                    │
+#                                    ▼ (nur Datenbank-Zugriff)
+# 
+#   DATABASE NETZWERK (Data Layer) - Höchste Sicherheitszone!              
+#   - postgres: PostgreSQL 15 Datenbank (absolut isoliert)                 
+# 
+# 
+# SICHERHEITSMERKMALE:
+# - 3 separate Netzwerk-Zonen mit internal: true für Backend und Database
+# - Least-Privilege-Prinzip: Container haben nur notwendige Netzwerkzugriffe
 # - Healthchecks für kritische Services
-# - Logging Begrenzung (max. 10MB pro Log)
+# - Read-only Volumes für Konfigurationen
+# - Secrets über .env Datei (nicht hardcoded)
+# - Security_opt: no-new-privileges verhindert Privilegien-Eskalation
+# - Logging-Begrenzung (max. 10MB pro Datei)
 # ============================================================================
 
 # ============================================================================
-# NETZWERKE
+# NETZWERKE (3 Security-Zonen)
 # ============================================================================
+# Die Netzwerke wurden bereits mit docker network create erstellt:
+# - docker network create --driver bridge --subnet=10.100.0.0/24 iot_dmz_network
+# - docker network create --driver bridge --internal --subnet=10.101.0.0/24 iot_internal_network
+# - docker network create --driver bridge --internal --subnet=10.102.0.0/24 iot_database_network
 
 networks:
-  # Ein gemeinsames Bridge-Netzwerk für alle Container
-  # Vorteile:
-  # - Einfach zu konfigurieren und zu debuggen
-  # - Container können sich über ihre Namen gegenseitig erreichen
-  # - DNS-Auflösung funktioniert automatisch (z.B. ping postgres)
+  # --------------------------------------------------------------------------
+  # 1. DMZ NETZWERK (Public: Demilitarized Zone)
+  # --------------------------------------------------------------------------
+  # Zweck: Aufnahme von Services, die von außen erreichbar sein müssen
+  # Enthält: frontend, backend, mosquitto, nginx_wss_proxy
+  # Sicherheit: Keine Verbindung zum Database Netzwerk!
+  # Von außen erreichbar: HTTP (8080), API (5000), MQTT (1883,8883,8084,8085)
+  dmz_network:
+    name: iot_dmz_network
+    external: true                    # Bestehendes Netzwerk verwenden (nicht neu erstellen)
   
-  iot_network:
-    name: iot_network                    # Fester Netzwerkname für einfache Referenzierung
-    driver: bridge                       # Standard Bridge-Treiber (kein Overlay benötigt)
+  # --------------------------------------------------------------------------
+  # 2. INTERNAL NETZWERK (Backend Services)
+  # --------------------------------------------------------------------------
+  # Zweck: Aufnahme von Services mit Geschäftslogik
+  # Enthält: bridge, provisioner
+  # Sicherheit: internal: true = KEIN externer Zugriff möglich!
+  # Kommunikation: Nur von DMZ Netzwerk erreichbar, nicht von außen
+  internal_network:
+    name: iot_internal_network
+    external: true                    # Bestehendes Netzwerk verwenden
+  
+  # --------------------------------------------------------------------------
+  # 3. DATABASE NETZWERK (Data Layer: Höchste Sicherheitszone)
+  # --------------------------------------------------------------------------
+  # Zweck: Absolute Isolierung der Datenbank
+  # Enthält: postgres
+  # Sicherheit: internal: true + höchste Isolierungsstufe
+  # Zugriff: Nur von bridge und provisioner aus dem Internal Netzwerk
+  database_network:
+    name: iot_database_network
+    external: true                    # Bestehendes Netzwerk verwenden
 
 # ============================================================================
 # VOLUMES (Persistente Datenspeicherung)
 # ============================================================================
-# Diese Volumes bleiben erhalten, auch wenn Container neu gestartet werden.
-# Dadurch gehen keine Daten verloren.
+# Daten überleben sogar bei Container-Neustarts und -Löschungen
 
 volumes:
   # PostgreSQL Datenbankdateien (sensor_data, device_status, devices)
   postgres_data:
-    name: iot_postgres_data              # Eindeutiger Volume-Name
-  
+    name: iot_postgres_data
   # pgAdmin Konfigurationen (optional, nur Entwicklung)
   pgadmin_data:
     name: iot_pgadmin_data
-  
   # Mosquitto Persistenz (Client-Sessions, Retained Messages)
   mosquitto_data:
     name: iot_mosquitto_data
-  
   # Mosquitto Logs (für Debugging)
   mosquitto_log:
     name: iot_mosquitto_log
@@ -68,36 +107,34 @@ volumes:
 
 services:
   
+  # ==========================================================================
+  # DMZ NETZWERK - Öffentlich erreichbare Services
+  # ==========================================================================
+
   # --------------------------------------------------------------------------
   # 1. MQTT BROKER (Eclipse Mosquitto)
   # --------------------------------------------------------------------------
   # Aufgabe: Zentraler Message Broker für MQTT Kommunikation
   # 
   # Ports:
-  # - 1883: MQTT (unverschlüsselt) für Bridge, Provisioner, MQTT Explorer
-  # - 8883: MQTTS (TLS verschlüsselt) für ESP8266
+  # - 1883: MQTT (unverschlüsselt) für Bridge, Provisioner
+  # - 8883: MQTTS (TLS) für ESP8266
   # - 8084: WSS (WebSocket Secure) für Browser
-  # - 8085: WS (unverschlüsselt) für MQTT Explorer / Tests
+  # - 8085: WS (unverschlüsselt) für MQTT Explorer
   # 
-  # Volumes:
-  # - config: Mosquitto Konfiguration (read-only)
-  # - data: Persistente Daten
-  # - log: Log-Dateien
-  # - passwd: Passwortdatei für Benutzer (read-only)
-  # - certs: TLS Zertifikate (read-only)
-  # - acls: ACL Datei für Zugriffskontrolle (read-only)
+  # Netzwerke: DMZ (extern) + Internal (für Bridge/Provisioner)
   # --------------------------------------------------------------------------
   mosquitto:
     image: eclipse-mosquitto:2.0                # Offizielles Mosquitto 2.0 Image
-    container_name: mqtt_broker                 # Fester Container-Name für DNS-Auflösung
-    restart: unless-stopped                     # Automatischer Neustart bei Absturz
+    container_name: mqtt_broker                 # Fester Container-Name für DNS
+    restart: unless-stopped                      # Automatischer Neustart bei Absturz
     
     # Exponierte Ports (Host:Container)
     ports:
-      - "1883:1883"      # MQTT (unverschlüsselt) - Für Bridge, Provisioner, MQTT Explorer
-      - "8883:8883"      # MQTTS (TLS) - Für ESP8266 (verschlüsselt)
-      - "8084:8084"      # WSS (WebSocket Secure) - Für Browser (TLS)
-      - "8085:8085"      # WS (unverschlüsselt) - Für MQTT Explorer / Tests
+      - "1883:1883"      # MQTT (unverschlüsselt) - Bridge, Provisioner
+      - "8883:8883"      # MQTTS (TLS) - ESP8266 (verschlüsselt)
+      - "8084:8084"      # WSS (WebSocket Secure) - Browser (TLS)
+      - "8085:8085"      # WS (unverschlüsselt) - MQTT Explorer / Tests
     
     # Volumes für Konfiguration und Persistenz
     volumes:
@@ -108,23 +145,234 @@ services:
       - ./certs:/mosquitto/certs:ro                  # TLS Zertifikate (read-only)
       - ./mosquitto/acls:/mosquitto/acls:ro          # ACL Datei (read-only)
     
-    # Umgebungsvariablen
     environment:
-      - TZ=Europe/Berlin                            # Zeitzone für korrekte Log-Zeitstempel
+      - TZ=Europe/Berlin                             # Zeitzone für korrekte Logs
     
     # Gesundheitscheck - prüft ob Mosquitto Prozess läuft
     healthcheck:
-      test: ["CMD", "pgrep", "mosquitto"]           # Prüft ob Prozess existiert
-      interval: 30s                                  # Alle 30 Sekunden prüfen
-      timeout: 10s                                   # Nach 10 Sekunden Timeout
-      retries: 3                                     # 3 Fehlversuche = unhealthy
+      test: ["CMD", "pgrep", "mosquitto"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     
-    # Netzwerk
+    # Dual-Netzwerk: DMZ (extern) + Internal (Backend-Kommunikation)
     networks:
-      - iot_network
+      - dmz_network          # Für externe Clients (ESP8266, Browser)
+      - internal_network     # Für Bridge und Provisioner
+    
+    # Sicherheitsoption: Verhindert Privilegien-Eskalation
+    security_opt:
+      - no-new-privileges:true
 
   # --------------------------------------------------------------------------
-  # 2. POSTGRESQL DATABASE
+  # 2. BACKEND API (Flask)
+  # --------------------------------------------------------------------------
+  # Aufgabe: REST API für Frontend und externe Clients
+  # 
+  # Endpunkte:
+  # - GET /api/latest - Aktuellste Temperatur
+  # - GET /api/stats - Statistiken (Min, Max, Avg)
+  # - GET /api/history - Temperaturverlauf (Zeitreihen)
+  # - GET /api/devices/status - Gerätestatus (online/offline)
+  # - GET /api/lwt/stats - LWT Statistiken
+  # 
+  # Netzwerke: DMZ (Frontend) + Database (Datenbankzugriff)
+  # --------------------------------------------------------------------------
+  backend:
+    build: ./backend
+    container_name: api_backend
+    restart: unless-stopped
+    
+    ports:
+      - "5000:5000"                                 # Flask Standardport
+    
+    environment:
+      DB_HOST: postgres_db                          # Container-Name (wichtig: postgres_db!)
+      DB_PORT: 5432
+      DB_NAME: sensordb
+      DB_USER: sensor_user
+      DB_PASSWORD: ${DB_PASSWORD}                   # Passwort aus .env Datei
+      FLASK_ENV: production                         # Produktionsmodus
+      FLASK_DEBUG: 0                                # Debug deaktiviert (sicherer)
+    
+    depends_on:
+      postgres:
+        condition: service_healthy                  # Wartet auf gesunde DB
+    
+    # Dual-Netzwerk: DMZ (für Frontend-Zugriff) + Database (für Datenbank)
+    networks:
+      - dmz_network          # Für Frontend API Calls
+      - database_network     # Für direkten Datenbankzugriff
+    
+    security_opt:
+      - no-new-privileges:true
+    
+    # Logging mit Rotation (verhindert unendliches Wachstum)
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"                              # Max. 10 MB pro Datei
+        max-file: "3"                                # Max. 3 Dateien
+
+  # --------------------------------------------------------------------------
+  # 3. FRONTEND (Nginx Static Webserver)
+  # --------------------------------------------------------------------------
+  # Aufgabe: Auslieferung der Single Page Application (SPA)
+  # 
+  # Funktionen:
+  # - Liefert HTML, CSS, JavaScript Dateien aus
+  # - Serverseitiges Routing für SPA
+  # - Proxy für API Calls zum Backend (vermeidet CORS)
+  # 
+  # Netzwerk: Nur DMZ (erreicht Backend über internal_network nicht direkt)
+  # --------------------------------------------------------------------------
+  frontend:
+    build: ./frontend
+    container_name: web_frontend
+    restart: unless-stopped
+    
+    ports:
+      - "8080:80"                                    # Nginx Standardport
+    
+    depends_on:
+      - backend                                      # Wartet auf Backend
+    
+    networks:
+      - dmz_network                                  # Nur DMZ Netzwerk
+    
+    security_opt:
+      - no-new-privileges:true
+    
+    # read_only: true                                # (Auskommentiert - Nginx braucht Schreibrechte für Cache)
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # INTERNAL NETZWERK (Backend - Kein externer Zugriff!)
+  # ==========================================================================
+
+  # --------------------------------------------------------------------------
+  # 4. MQTT BRIDGE (Python)
+  # --------------------------------------------------------------------------
+  # Aufgabe: Verbindet MQTT mit PostgreSQL
+  # 
+  # Funktionen:
+  # - Abonniert sensor/temperatur Topic
+  # - Validiert JSON Payloads gegen Schema
+  # - Speichert Daten in PostgreSQL
+  # - Aktualisiert Gerätestatus (online/offline)
+  # - Verarbeitet Heartbeat und LWT Nachrichten
+  # 
+  # Netzwerke: Internal (MQTT) + Database (PostgreSQL)
+  # Sicherheit: read_only: true - Keine Schreibrechte im Container
+  # --------------------------------------------------------------------------
+  bridge:
+    build: ./bridge
+    container_name: mqtt_bridge
+    restart: unless-stopped
+    
+    environment:
+      # MQTT Verbindungsparameter
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      MQTT_BRIDGE_USER: ${MQTT_BRIDGE_USER}
+      MQTT_BRIDGE_PASSWORD: ${MQTT_BRIDGE_PASSWORD}
+      # Datenbank Verbindungsparameter
+      DB_HOST: postgres_db
+      DB_PORT: 5432
+      DB_NAME: sensordb
+      DB_USER: sensor_user
+      DB_PASSWORD: ${DB_PASSWORD}
+    
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    
+    networks:
+      - internal_network     # Für MQTT Kommunikation mit Mosquitto
+      - database_network     # Für Datenbankzugriff
+    
+    security_opt:
+      - no-new-privileges:true
+    
+    read_only: true                                   # Erhöhte Sicherheit
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # --------------------------------------------------------------------------
+  # 5. PROVISIONING SERVICE (Python)
+  # --------------------------------------------------------------------------
+  # Aufgabe: Automatisches Geräte-Onboarding
+  # 
+  # Funktionen:
+  # - Empfängt Provisioning Requests von neuen ESP8266
+  # - Generiert eindeutige MQTT Credentials
+  # - Erstellt TLS Zertifikate (optional)
+  # - Speichert Geräte in devices Tabelle
+  # 
+  # Netzwerke: Internal (MQTT) + Database (PostgreSQL)
+  # Sicherheit: read_only: true + CA Zertifikate read-only
+  # --------------------------------------------------------------------------
+  provisioner:
+    build: ./provisioner
+    container_name: provisioner_service
+    restart: unless-stopped
+    
+    environment:
+      # MQTT Verbindungsparameter
+      MQTT_HOST: mosquitto
+      MQTT_PORT: 1883
+      MQTT_PROVISION_USER: ${MQTT_PROVISION_USER}
+      MQTT_PROVISION_PASSWORD: ${MQTT_PROVISION_PASSWORD}
+      # Datenbank Verbindungsparameter
+      DB_HOST: postgres_db
+      DB_PORT: 5432
+      DB_NAME: sensordb
+      DB_USER: sensor_user
+      DB_PASSWORD: ${DB_PASSWORD}
+      # Externe Broker Adresse (für ESP8266)
+      MQTT_BROKER_ADDRESS: ${MQTT_BROKER_ADDRESS}
+    
+    volumes:
+      - ./certs:/app/certs:ro                        # CA Zertifikate (read-only)
+    
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    
+    networks:
+      - internal_network     # Für MQTT Kommunikation
+      - database_network     # Für Datenbankzugriff
+    
+    security_opt:
+      - no-new-privileges:true
+    
+    read_only: true
+    
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # ==========================================================================
+  # DATABASE NETZWERK (Höchste Sicherheitszone)
+  # ==========================================================================
+
+  # --------------------------------------------------------------------------
+  # 6. POSTGRESQL DATABASE (Nur Database Network)
   # --------------------------------------------------------------------------
   # Aufgabe: Zentrale Datenbank für alle persistenten Daten
   # 
@@ -134,232 +382,50 @@ services:
   # - devices: Provisionierte Geräte mit Credentials
   # 
   # Sicherheit:
-  # - Passwort aus .env Datei (nicht hardcoded)
-  # - Gesundheitscheck für Abhängigkeiten
-  # - Port 5432 nur für pgAdmin/Tools exponiert (optional)
+  # - NUR database_network (absolut isoliert!)
+  # - KEINE externen Ports!
+  # - Healthcheck für Verfügbarkeit
+  # - Passwort aus .env Datei
   # --------------------------------------------------------------------------
   postgres:
-    image: postgres:15                              # Offizielles PostgreSQL 15 Image
-    container_name: postgres_db                     # Fester Container-Name
+    image: postgres:15                              # Offizielles PostgreSQL 15
+    container_name: postgres_db
     restart: unless-stopped
     
-    # Umgebungsvariablen für Datenbank-Konfiguration
     environment:
-      POSTGRES_DB: sensordb                         # Name der Standard-Datenbank
-      POSTGRES_USER: sensor_user                    # Datenbank-Benutzer
-      POSTGRES_PASSWORD: ${DB_PASSWORD}             # Passwort aus .env Datei (sicher!)
+      POSTGRES_DB: sensordb                         # Datenbankname
+      POSTGRES_USER: sensor_user                    # Datenbankbenutzer
+      POSTGRES_PASSWORD: ${DB_PASSWORD}             # Passwort aus .env
       TZ: Europe/Berlin                             # Zeitzone für Zeitstempel
       PGTZ: Europe/Berlin                           # PostgreSQL-interne Zeitzone
     
-    # Exponierter Port (optional - für pgAdmin oder externe Tools)
-    # ports:
-    #   - "5432:5432"      # Auskommentiert für mehr Sicherheit (nur wenn benötigt)
+    # WICHTIG: KEINE externen Ports für maximale Sicherheit!
+    # Kein "ports:" Eintrag - Datenbank ist nur intern erreichbar!
     
-    # Volumes für persistente Datenspeicherung
     volumes:
-      - postgres_data:/var/lib/postgresql/data      # Datenbankdateien (persistent)
-      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro  # Initialisierungsskript
+      - postgres_data:/var/lib/postgresql/data      # Persistente Daten
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro  # Initialisierung
     
-    # Gesundheitscheck - prüft ob Datenbank bereit ist
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U sensor_user -d sensordb"]  # Prüft Datenbank-Verbindung
+      test: ["CMD-SHELL", "pg_isready -U sensor_user -d sensordb"]
       interval: 30s
       timeout: 10s
       retries: 5
     
     networks:
-      - iot_network
+      - database_network                            # NUR Database Netzwerk!
+    
+    security_opt:
+      - no-new-privileges:true
+
+  # ==========================================================================
+  # ENTWICKLUNG & OPTIONALE SERVICES
+  # ==========================================================================
 
   # --------------------------------------------------------------------------
-  # 3. BACKEND API (Flask)
+  # 7. PGADMIN (Nur Entwicklung - mit dev-Profil)
   # --------------------------------------------------------------------------
-  # Aufgabe: REST API für Frontend und externe Clients
-  # 
-  # Endpunkte:
-  # - GET /api/latest          - Aktuellste Temperatur
-  # - GET /api/stats           - Statistiken (Min, Max, Avg)
-  # - GET /api/history         - Temperaturverlauf (Zeitreihen)
-  # - GET /api/devices/status  - Gerätestatus (online/offline)
-  # - GET /api/lwt/stats       - LWT Statistiken
-  # - GET /api/firmware/version - Firmware Version
-  # - POST /api/firmware/upload - OTA Firmware Upload
-  # 
-  # Port: 5000 (Flask Standard)
-  # --------------------------------------------------------------------------
-  backend:
-    build: ./backend                                # Baut aus ./backend/Dockerfile
-    container_name: api_backend
-    restart: unless-stopped
-    
-    ports:
-      - "5000:5000"                                 # Flask Standardport
-    
-    # Umgebungsvariablen für Datenbankverbindung
-    environment:
-      DB_HOST: postgres                             # Container-Name als Hostname (Docker DNS)
-      DB_PORT: 5432
-      DB_NAME: sensordb
-      DB_USER: sensor_user
-      DB_PASSWORD: ${DB_PASSWORD}                   # Passwort aus .env
-      FLASK_ENV: production                         # Produktionsmodus (Debug aus)
-      FLASK_DEBUG: 0                                # Debug deaktiviert (sicherer)
-    
-    # Wartet bis PostgreSQL gesund ist (verhindert Start-Fehler)
-    depends_on:
-      postgres:
-        condition: service_healthy                  # Startet erst wenn DB healthy ist
-    
-    networks:
-      - iot_network
-    
-    # Logging Konfiguration (verhindert unendliches Log-Wachstum)
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"                              # Max. 10 MB pro Log-Datei
-        max-file: "3"                                # Max. 3 Log-Dateien (Rotierung)
-
-  # --------------------------------------------------------------------------
-  # 4. FRONTEND (Nginx Static Webserver)
-  # --------------------------------------------------------------------------
-  # Aufgabe: Auslieferung der statischen SPA (Single Page Application)
-  # 
-  # Funktionen:
-  # - Liefert HTML, CSS, JavaScript Dateien aus
-  # - Serverseitiges Routing für SPA
-  # - Proxy für API Calls zum Backend (optional, vermeidet CORS)
-  # 
-  # Port: 8080 (für Dashboard-Zugriff)
-  # --------------------------------------------------------------------------
-  frontend:
-    build: ./frontend                               # Baut aus ./frontend/Dockerfile
-    container_name: web_frontend
-    restart: unless-stopped
-    
-    ports:
-      - "8080:80"                                    # Nginx Standardport
-    
-    # Wartet bis Backend API verfügbar ist (Start-Reihenfolge)
-    depends_on:
-      - backend
-    
-    networks:
-      - iot_network
-    
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  # --------------------------------------------------------------------------
-  # 5. MQTT BRIDGE (Python)
-  # --------------------------------------------------------------------------
-  # Aufgabe: Verbindet MQTT mit PostgreSQL
-  # 
-  # Funktionen:
-  # - Abonniert sensor/temperatur Topic vom MQTT Broker
-  # - Validiert JSON Payloads gegen Schema
-  # - Speichert Daten in PostgreSQL sensor_data Tabelle
-  # - Aktualisiert Gerätestatus in device_status Tabelle
-  # - Verarbeitet Heartbeat Nachrichten (status/+/online)
-  # - Verarbeitet LWT Nachrichten (lwt/+)
-  # 
-  # Sicherheit: Kein externer Port, läuft im internen Netzwerk
-  # --------------------------------------------------------------------------
-  bridge:
-    build: ./bridge                                 # Baut aus ./bridge/Dockerfile
-    container_name: mqtt_bridge
-    restart: unless-stopped
-    
-    # Umgebungsvariablen für MQTT und Datenbank
-    environment:
-      # MQTT Verbindungsparameter
-      MQTT_HOST: mosquitto                          # Container-Name als Hostname
-      MQTT_PORT: 1883                               # Interner Port (ohne TLS)
-      MQTT_BRIDGE_USER: ${MQTT_BRIDGE_USER}         # Bridge Benutzername aus .env
-      MQTT_BRIDGE_PASSWORD: ${MQTT_BRIDGE_PASSWORD} # Bridge Passwort aus .env
-      # Datenbank Verbindungsparameter
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: sensordb
-      DB_USER: sensor_user
-      DB_PASSWORD: ${DB_PASSWORD}
-    
-    # Wartet auf gesunde Abhängigkeiten
-    depends_on:
-      mosquitto:
-        condition: service_healthy                  # Mosquitto muss laufen
-      postgres:
-        condition: service_healthy                  # PostgreSQL muss laufen
-    
-    networks:
-      - iot_network
-    
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  # --------------------------------------------------------------------------
-  # 6. PROVISIONING SERVICE (Python)
-  # --------------------------------------------------------------------------
-  # Aufgabe: Automatisches Geräte-Onboarding
-  # 
-  # Funktionen:
-  # - Empfängt Provisioning Requests von neuen ESP8266 Geräten
-  # - Generiert eindeutige MQTT Credentials
-  # - Erstellt TLS Zertifikate (optional)
-  # - Speichert Geräte in devices Tabelle
-  # 
-  # Sicherheit:
-  # - Benötigt Zugriff auf CA Zertifikate (read-only)
-  # - Kein externer Port, läuft im internen Netzwerk
-  # --------------------------------------------------------------------------
-  provisioner:
-    build: ./provisioner                            # Baut aus ./provisioner/Dockerfile
-    container_name: provisioner_service
-    restart: unless-stopped
-    
-    environment:
-      # MQTT Verbindungsparameter
-      MQTT_HOST: mosquitto
-      MQTT_PORT: 1883
-      MQTT_PROVISION_USER: ${MQTT_PROVISION_USER}   # Provisioner Benutzername aus .env
-      MQTT_PROVISION_PASSWORD: ${MQTT_PROVISION_PASSWORD}  # Provisioner Passwort aus .env
-      # Datenbank Verbindungsparameter
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: sensordb
-      DB_USER: sensor_user
-      DB_PASSWORD: ${DB_PASSWORD}
-      # MQTT Broker Adresse (für ESP8266, muss von außen erreichbar sein!)
-      MQTT_BROKER_ADDRESS: ${MQTT_BROKER_ADDRESS}   # IP des Windows Rechners (192.168.0.105)
-    
-    # CA Zertifikate für TLS (read-only für Sicherheit)
-    volumes:
-      - ./certs:/app/certs:ro
-    
-    depends_on:
-      mosquitto:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
-    
-    networks:
-      - iot_network
-    
-    logging:
-      driver: "json-file"
-      options:
-        max-size: "10m"
-        max-file: "3"
-
-  # --------------------------------------------------------------------------
-  # 7. PGADMIN (Datenbankverwaltung - Optional)
-  # --------------------------------------------------------------------------
-  # Aufgabe: Grafische Oberfläche für PostgreSQL Datenbank
+  # Aufgabe: Grafische Datenbankverwaltung
   # 
   # Funktionen:
   # - Tabellen visualisieren
@@ -368,33 +434,67 @@ services:
   # 
   # Hinweis: Nur in Entwicklungsumgebung aktivieren (--profile dev)
   # Sicherheit: Nicht für Produktion empfohlen!
-  # 
-  # Port: 5050 (pgAdmin Web-Interface)
   # --------------------------------------------------------------------------
   pgadmin:
-    image: dpage/pgadmin4:latest                    # Offizielles pgAdmin4 Image
+    image: dpage/pgadmin4:latest
     container_name: pgadmin
     restart: unless-stopped
-    
-    # Nur aktiv wenn mit --profile dev gestartet
-    # Verwendung: docker-compose --profile dev up -d
-    #profiles:
-    #  - dev
+    profiles:
+      - dev                                         # Nur mit --profile dev starten
     
     environment:
-      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}       # Login E-Mail aus .env
-      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD} # Login Passwort aus .env
-      PGADMIN_CONFIG_SERVER_MODE: 'False'           # Einzelbenutzer-Modus (nicht Multi-User)
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+      PGADMIN_CONFIG_SERVER_MODE: 'False'           # Einzelbenutzer-Modus
     
     ports:
       - "5050:80"                                    # Web-Interface Port
     
     volumes:
-      - pgadmin_data:/var/lib/pgadmin               # Persistente Konfigurationen
+      - pgadmin_data:/var/lib/pgadmin               # Persistente Konfiguration
     
     depends_on:
       postgres:
-        condition: service_healthy                  # Wartet auf Datenbank
+        condition: service_healthy
     
     networks:
-      - iot_network
+      - dmz_network          # Für Web-Zugriff
+      - database_network     # Für direkten DB-Zugriff (nur Entwicklung!)
+    
+    security_opt:
+      - no-new-privileges:true
+
+  # --------------------------------------------------------------------------
+  # 8. NGINX WSS PROXY (Optional - mit wss-Profil)
+  # --------------------------------------------------------------------------
+  # Aufgabe: WebSocket Secure Proxy für MQTT over WSS
+  # 
+  # Funktionen:
+  # - Leitet WSS Verbindungen an Mosquitto weiter
+  # - SSL Termination für WebSocket Verbindungen
+  # - Standard-Ports 80 und 443
+  # 
+  # Ports:
+  # - 80: HTTP (Weiterleitung zu HTTPS)
+  # - 443: HTTPS/WSS (verschlüsselte WebSockets)
+  # --------------------------------------------------------------------------
+  nginx_wss_proxy:
+    image: nginx:alpine
+    container_name: nginx_wss_proxy
+    restart: unless-stopped
+    profiles:
+      - wss                                         # Nur mit --profile wss starten
+    
+    ports:
+      - "80:80"                                      # HTTP (Weiterleitung)
+      - "443:443"                                    # HTTPS / WSS
+    
+    volumes:
+      - ./wss-demo/nginx/nginx.conf:/etc/nginx/nginx.conf:ro   # Nginx Konfiguration
+      - ./certs:/etc/nginx/certs:ro                            # TLS Zertifikate
+    
+    networks:
+      - dmz_network                                  # Nur DMZ Netzwerk
+    
+    security_opt:
+      - no-new-privileges:true
