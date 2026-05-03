@@ -196,13 +196,23 @@ status/{device_id}/online
 * ESP → Broker	Last Will Nachricht
   
 ### 2. REST API Endpoints (Port 5000)
-* Methode	Endpoint	Beschreibung	Response
-GET	/api/latest	Aktuellste Temperatur	{"device_id":"...", "temperature":25.5, "unit":"celsius", "timestamp":"2026-04-17 10:30:00"}
-* GET	/api/history?hours=24&limit=200	Historische Daten	[{"device_id":"...", "temperature":25.5, "timestamp":"..."}]
-* GET	/api/devices	Alle registrierten Geräte	[{"device_id":"...", "status":"online", "last_seen":"..."}]
-* GET	/api/stats?hours=24	Statistiken	{"min_temp":23.5, "max_temp":25.8, "avg_temp":24.6, "count":288}
-* GET	/api/health	Health Check	{"status":"healthy", "database":"connected", "timezone":"Europe/Berlin"}
-* GET	/	Dashboard HTML für HTML Seite
+* Methode	Endpoint	Beschreibung	Response:
+  
+* GET/api/latest	Aktuellste Temperatur	{"device_id":"...", "temperature":25.5, "unit":"celsius", "timestamp":"2026-04-17 10:30:00"}
+* GET/api/history?hours=24&limit=200	Historische Daten	[{"device_id":"...", "temperature":25.5, "timestamp":"..."}]
+* GET/api/devices:	Alle registrierten Geräte	[{"device_id":"...", "status":"online", "last_seen":"..."}]
+* GET/api/stats?hours=24:	Statistiken	{"min_temp":23.5, "max_temp":25.8, "avg_temp":24.6, "count":288}
+* GET/api/health: Health Check	{"status":"healthy", "database":"connected", "timezone":"Europe/Berlin"}
+* GET/	Dashboard HTML für HTML Seite
+* GET /api/firmware/version
+* GET /api/lwt/stats
+
+### Dashboard und API testen:
+#### 1.Dashboard öffnen
+* start http://192.168.0.105:8080
+  
+#### 2.API testen
+* curl http://192.168.0.105:5000/api/health
 
 ## Datenbank Schema
 
@@ -363,10 +373,26 @@ strlcpy(creds.mqtt_password, doc["mqtt_password"] | "", sizeof(creds.mqtt_passwo
 
 ## 🔧 Betrieb
 Container Management
-bash
+Bash oder PowerShell:
 
 ### Alle Container starten
 docker-compose up -d
+
+### Alle Services bauen und starten
+docker-compose up -d --build
+
+### Nur Backend neu bauen und starten
+docker-compose build backend
+docker-compose up -d backend
+
+### Provisioner starten (im Docker Container)
+docker-compose up -d provisioner
+
+### Logs anzeigen
+docker logs -f provisioner_service
+
+### Neues Gerät provisionieren (Serial Monitor für Arduino)
+RESET
 
 ### Container stoppen
 docker-compose down
@@ -494,35 +520,58 @@ json
     "count": 288
 }
 
-## 🐛 Fehlersuche
+### 🐛 Fehlersuche
 Bridge startet nicht (pytz fehlt)
-bash
+* Bash oder PowerShell verwenden:
+
 
 docker-compose build --no-cache bridge
 docker-compose up -d bridge
 
-MQTT Verbindungsfehler (rc=-2)
-bash
+#### Alle Container starten
+docker-compose up -d
 
-### Prüfe ob Mosquitto läuft
+#### Alle Container stoppen
+docker-compose down
+
+#### Logs aller Services
+docker-compose logs -f
+
+#### Bridge Logs (Temperaturdaten)
+docker logs -f mqtt_bridge
+
+### MQTT Verbindungsfehler (rc=-2)
+* Bash oder PowerShell verwenden:
+
+#### Prüfe ob Mosquitto läuft
 docker ps | findstr mqtt
 
-### Prüfe Logs
+#### Prüfe Logs
 docker logs mqtt_broker --tail 30
 
-### Teste TLS Verbindung
+#### Alten Container entfernen
+##### 1. Stoppe den alten Container
+docker stop api_backend
+
+##### 2. Lösche den alten Container
+docker rm api_backend
+
+##### 3. Starte neuen Container
+docker run -d -p 5000:5000 --name api_backend iot-backend
+
+#### Teste TLS Verbindung
 docker exec mqtt_broker mosquitto_sub -t "test" -u test_device -P test_password_123 --cafile /mosquitto/certs/ca.crt -p 8883
 
 Keine Daten in der Datenbank
 bash
 
-### Prüfe Bridge Logs
+#### Prüfe Bridge Logs
 docker logs mqtt_bridge --tail 50
 
-### Prüfe ESP8266 Verbindung
+#### Prüfe ESP8266 Verbindung
 docker logs mqtt_broker --tail 20 | findstr "esp8266"
 
-### Sende manuelle Test-Nachricht
+#### Sende manuelle Test-Nachricht
 docker exec mqtt_broker mosquitto_pub -t "sensor/temperatur" -m '{"device_id":"test","temp":25.5}' -u test_device -P test_password_123 -p 1883
 
 Factory Reset für ESP8266
@@ -589,6 +638,7 @@ MIT License - Siehe LICENSE Datei
     Eclipse Mosquitto Team
 
     Flask & PostgreSQL Entwickler
+    MQTT Explorer Community
 
 
 

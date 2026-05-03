@@ -21,7 +21,7 @@ topic read provisioning/status
 topic write provisioning/status
 
 # ------------------------------------------------------------
-# TEST_DEVICE (vollständige Rechte f?r Tests)
+# TEST_DEVICE (vollständige Rechte fuer Tests)
 # ------------------------------------------------------------
 user test_device
 topic read #
