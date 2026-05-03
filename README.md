@@ -36,14 +36,14 @@ Das System ermöglicht die automatische Erfassung, Übertragung und Visualisieru
 ## 📊 Systemarchitektur
 
 <div align="center">
-    <img src="docs/Architektur_UML/images/Architektur_Diagramm-IoT_Temperature_Monitoring_System___Architektur.png" alt="Systemarchitektur" width="90%">
+    <img src="docs/Architektur_UML/images/IoT_Temperature_Monitoring_System_Optimierte_Docker_Architektur.png" alt="Systemarchitektur" width="90%">
     <p><em>Überblick über die gesamte Systemarchitektur</em></p>
 </div>
 
 ## 🔌 Komponenten & Schnittstellen
 
 <div align="center">
-    <img src="docs/Architektur_UML/images/Komponentdiagramm-IoT_Temperature_Monitoring_System___Komponenten___Schnittstellen.png" alt="Komponentendiagramm" width="90%">
+    <img src="docs/Architektur_UML/images/IoT_Temperature_Monitoring_System_Komponent_Gesamtarchitektur.png" alt="Komponentendiagramm" width="90%">
     <p><em>Detaillierte Komponenten mit allen Schnittstellen</em></p>
 </div>
 
@@ -65,6 +65,13 @@ Das System ermöglicht die automatische Erfassung, Übertragung und Visualisieru
 
 <div align="center">
     <img src="docs/Architektur_UML/images/IoT_Temperature_Monitoring_System-Kompakte_Architektur.png" alt="Klassendiagramm" width="90%">
+    <p><em>Gesamt-System Kompakte Architektur</em></p>
+</div>
+
+## IoT Temperature Monitoring Gesamt-Netzwerk-Architektur(Detaillierte)
+
+<div align="center">
+    <img src="docs/Architektur_UML/images/Netzwerkarchitektur_mit_Security_Zones_detailliert.png" alt="Klassendiagramm" width="90%">
     <p><em>Gesamt-System Kompakte Architektur</em></p>
 </div>
 
