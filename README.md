@@ -362,7 +362,7 @@ IPAddress subnet(255, 255, 255, 0);
 const char* PROVISIONING_HOST = "192.168.0.105";
 const int PROVISIONING_PORT = 1883;
 
-### Konfiguration in Provisioning.h:
+### Konfiguration in Provisioning.h (IP-Address anpassen oder ändern):
    
 * strlcpy(creds.device_id, device_id.c_str(), sizeof(creds.device_id));
 strlcpy(creds.mqtt_broker, doc["mqtt_broker"] | "192.168.0.105", sizeof(creds.mqtt_broker));
