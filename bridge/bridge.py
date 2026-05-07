@@ -18,7 +18,8 @@
 # ZEITZONE: Europe/Berlin (CET/CEST)
 # Alle Zeitstempel werden in lokaler Berliner Zeit gespeichert
 # ============================================================================
-
+# Stelle sicher dass SENSOR_SCHEMA exportiert wird
+__all__ = ['DatabaseManager', 'MQTTBridge', 'SENSOR_SCHEMA', 'get_local_now', 'LOCAL_TZ']
 # ============================================================================
 # IMPORTS
 # ============================================================================

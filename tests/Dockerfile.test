@@ -1,0 +1,36 @@
+# Test-Runner Dockerfile
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Installiere Test-Abhängigkeiten
+COPY requirements.test.txt .
+RUN pip install --no-cache-dir -r requirements.test.txt
+
+# Kopiere requirements aus tests Ordner
+COPY tests/requirements.test.txt /app/
+COPY backend/requirements.txt /app/backend/
+COPY bridge/requirements.txt /app/bridge/
+COPY provisioner/requirements.txt /app/provisioner/
+
+RUN pip install --no-cache-dir -r requirements.test.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt
+RUN pip install --no-cache-dir -r bridge/requirements.txt
+RUN pip install --no-cache-dir -r provisioner/requirements.txt
+
+# Kopiere Test-Dateien
+COPY . /app/tests/
+COPY ../bridge/bridge.py /app/bridge/
+COPY ../backend/app.py /app/backend/
+COPY ../provisioner/app.py /app/provisioner/
+
+# Erstelle Ergebnisse-Verzeichnisse
+RUN mkdir -p /app/test_results /app/coverage
+
+ENV PYTHONPATH=/app
+ENV PY_TEST=true
+
+COPY . /app/
+
+# Standard: Alle Tests ausführen
+CMD ["pytest", "tests/", "-v", "--tb=short", "--strict-markers", "--cov=.", "--cov-report=html", "--cov-report=term"]

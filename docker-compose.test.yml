@@ -1,0 +1,306 @@
+# ============================================================================
+# DOCKER COMPOSE TEST KONFIGURATION - TDD (Test-Driven Development)
+# ============================================================================
+# 
+# Version: 1.1
+# Datum: 06.05.2026
+# 
+# Diese Konfiguration startet eine isolierte Testumgebung für:
+# - Unit Tests (keine externen Services)
+# - Integration Tests (mit MQTT + PostgreSQL)
+# - End-to-End Tests (volles System)
+# 
+# Verwendung:
+#   docker-compose -f docker-compose.test.yml up unit-test
+#   docker-compose -f docker-compose.test.yml up integration-test
+#   docker-compose -f docker-compose.test.yml up e2e-test
+# ============================================================================
+
+# ============================================================================
+# NETZWERKE (Isolierte Test-Umgebung)
+# ============================================================================
+
+networks:
+  test_network:
+    name: iot_test_network
+    driver: bridge
+    # Kein ipam - Docker wählt automatisch freie Subnetze
+
+# ============================================================================
+# VOLUMES
+# ============================================================================
+
+volumes:
+  test_postgres_data:
+    name: iot_test_postgres_data
+  test_mosquitto_data:
+    name: iot_test_mosquitto_data
+  test_mosquitto_log:
+    name: iot_test_mosquitto_log
+
+# ============================================================================
+# SERVICES
+# ============================================================================
+
+services:
+  # ==========================================================================
+  # 1. TEST MQTT BROKER (nur für Integration/E2E)
+  # ==========================================================================
+  test_mosquitto:
+    image: eclipse-mosquitto:2.0
+    container_name: test_mqtt_broker
+    restart: "no"
+    profiles:
+      - integration
+      - e2e
+    ports:
+      - "18883:1883"
+    volumes:
+      # Verwende bestehende Config (falls vorhanden) oder erstelle Standard
+      - ./mosquitto/config:/mosquitto/config:ro
+      - test_mosquitto_data:/mosquitto/data
+      - test_mosquitto_log:/mosquitto/log
+      - ./mosquitto/passwd:/mosquitto/passwd:ro
+      - ./certs:/mosquitto/certs:ro
+    environment:
+      - TZ=Europe/Berlin
+    healthcheck:
+      test: ["CMD", "pgrep", "mosquitto"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - test_network
+
+  # ==========================================================================
+  # 2. TEST POSTGRESQL (nur für Integration/E2E)
+  # ==========================================================================
+  test_postgres:
+    image: postgres:15
+    container_name: test_postgres_db
+    restart: "no"
+    profiles:
+      - integration
+      - e2e
+    environment:
+      POSTGRES_DB: test_sensordb
+      POSTGRES_USER: test_sensor_user
+      POSTGRES_PASSWORD: test_db_password_123
+      TZ: Europe/Berlin
+      PGTZ: Europe/Berlin
+    ports:
+      - "15432:5432"
+    volumes:
+      - test_postgres_data:/var/lib/postgresql/data
+      # Verwende bestehende init.sql oder erstelle Standard
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test_sensor_user -d test_sensordb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - test_network
+
+  # ==========================================================================
+  # 3. TEST BRIDGE (nur für Integration/E2E)
+  # ==========================================================================
+  test_bridge:
+    build:
+      context: ./bridge
+      dockerfile: Dockerfile
+    container_name: test_mqtt_bridge
+    restart: "no"
+    profiles:
+      - integration
+      - e2e
+    environment:
+      MQTT_HOST: test_mosquitto
+      MQTT_PORT: 1883
+      MQTT_BRIDGE_USER: bridge_user
+      MQTT_BRIDGE_PASSWORD: BridgePasswort456
+      DB_HOST: test_postgres
+      DB_PORT: 5432
+      DB_NAME: test_sensordb
+      DB_USER: test_sensor_user
+      DB_PASSWORD: test_db_password_123
+    depends_on:
+      test_mosquitto:
+        condition: service_healthy
+      test_postgres:
+        condition: service_healthy
+    networks:
+      - test_network
+
+  # ==========================================================================
+  # 4. TEST PROVISIONER (nur für Integration/E2E)
+  # ==========================================================================
+  test_provisioner:
+    build:
+      context: ./provisioner
+      dockerfile: Dockerfile
+    container_name: test_provisioner
+    restart: "no"
+    profiles:
+      - integration
+      - e2e
+    environment:
+      MQTT_HOST: test_mosquitto
+      MQTT_PORT: 1883
+      MQTT_PROVISION_USER: provisioner
+      MQTT_PROVISION_PASSWORD: ProvisionerPasswort789
+      DB_HOST: test_postgres
+      DB_PORT: 5432
+      DB_NAME: test_sensordb
+      DB_USER: test_sensor_user
+      DB_PASSWORD: test_db_password_123
+      MQTT_BROKER_ADDRESS: "test_mosquitto"
+    volumes:
+      - ./certs:/app/certs:ro
+    depends_on:
+      test_mosquitto:
+        condition: service_healthy
+      test_postgres:
+        condition: service_healthy
+    networks:
+      - test_network
+
+  # ==========================================================================
+  # 5. TEST BACKEND API (nur für Integration/E2E)
+  # ==========================================================================
+  test_backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: test_api_backend
+    restart: "no"
+    profiles:
+      - integration
+      - e2e
+    environment:
+      DB_HOST: test_postgres
+      DB_PORT: 5432
+      DB_NAME: test_sensordb
+      DB_USER: test_sensor_user
+      DB_PASSWORD: test_db_password_123
+      FLASK_ENV: testing
+      FLASK_DEBUG: 1
+    ports:
+      - "15000:5000"
+    depends_on:
+      test_postgres:
+        condition: service_healthy
+    networks:
+      - test_network
+
+  # ==========================================================================
+  # 6. UNIT TEST RUNNER (nur Unit Tests, keine Services)
+  # ==========================================================================
+  unit-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: test_runner_unit
+    restart: "no"
+    profiles:
+      - unit
+    volumes:
+      - ./tests:/app/tests
+      - ./test_results:/app/test_results
+      - ./coverage:/app/coverage
+    working_dir: /app
+    command: >
+      sh -c "
+        pip install pytest pytest-cov pytest-mock flask-cors &&
+        pytest tests/unit/ -v --cov=. --cov-report=html --cov-report=term
+      "
+    networks:
+      - test_network
+
+  # ==========================================================================
+  # 7. INTEGRATION TEST RUNNER (mit Services)
+  # ==========================================================================
+  integration-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: test_runner_integration
+    restart: "no"
+    profiles:
+      - integration
+    environment:
+      API_BASE_URL: "http://test_backend:5000/api"
+      MQTT_HOST: test_mosquitto
+      MQTT_PORT: 1883
+      DB_HOST: test_postgres
+      DB_PORT: 5432
+      DB_NAME: test_sensordb
+      DB_USER: test_sensor_user
+      DB_PASSWORD: test_db_password_123
+    volumes:
+      - ./tests:/app/tests
+      - ./test_results:/app/test_results
+      - ./coverage:/app/coverage
+    depends_on:
+      test_mosquitto:
+        condition: service_healthy
+      test_postgres:
+        condition: service_healthy
+      test_bridge:
+        condition: service_started
+      test_backend:
+        condition: service_started
+    working_dir: /app
+    command: >
+      sh -c "
+        sleep 10 &&
+        pip install pytest pytest-cov pytest-mock flask-cors &&
+        pytest tests/integration/ -v -m integration --cov=. --cov-report=html --cov-report=term
+      "
+    networks:
+      - test_network
+
+  # ==========================================================================
+  # 8. E2E TEST RUNNER (volles System)
+  # ==========================================================================
+  e2e-test:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: test_runner_e2e
+    restart: "no"
+    profiles:
+      - e2e
+    environment:
+      API_BASE_URL: "http://test_backend:5000/api"
+      MQTT_HOST: test_mosquitto
+      MQTT_PORT: 1883
+      DB_HOST: test_postgres
+      DB_PORT: 5432
+      DB_NAME: test_sensordb
+      DB_USER: test_sensor_user
+      DB_PASSWORD: test_db_password_123
+    volumes:
+      - ./tests:/app/tests
+      - ./test_results:/app/test_results
+      - ./coverage:/app/coverage
+    depends_on:
+      test_mosquitto:
+        condition: service_healthy
+      test_postgres:
+        condition: service_healthy
+      test_bridge:
+        condition: service_started
+      test_provisioner:
+        condition: service_started
+      test_backend:
+        condition: service_started
+    working_dir: /app
+    command: >
+      sh -c "
+        sleep 10 &&
+        pip install pytest pytest-cov pytest-mock flask-cors &&
+        pytest tests/e2e/ -v -m e2e --cov=. --cov-report=html --cov-report=term
+      "
+    networks:
+      - test_network

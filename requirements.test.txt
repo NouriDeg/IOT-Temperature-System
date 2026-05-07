@@ -1,0 +1,38 @@
+# ============================================
+# TEST-ABHÄNGIGKEITEN FÜR IOT PROJEKT
+# ============================================
+
+# Test Framework
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+pytest-timeout==2.2.0
+pytest-xdist==3.5.0
+pytest-asyncio==0.21.1
+
+# HTTP und API Tests
+requests==2.31.0
+requests-mock==1.11.0
+flask-testing==0.8.1
+
+# MQTT Tests
+paho-mqtt==1.6.1
+
+# Datenbank Tests
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.23
+# testcontainers ist optional - für echte Integrationstests
+# testcontainers==3.7.1  # (optional, nur wenn Docker für Tests verfügbar)
+
+# Mocking
+faker==20.1.0
+freezegun==1.4.0
+responses==0.24.0
+
+# Code Qualität
+black==23.11.0
+flake8==6.1.0
+mypy==1.7.0
+
+# Integration Tests
+docker==6.1.3

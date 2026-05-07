@@ -1,0 +1,46 @@
+# ============================================================================
+# BACKEND DOCKERFILE FÜR TESTS
+# ============================================================================
+# 
+# Version: 1.0
+# Datum: 07.05.2026
+# 
+# Dieses Image wird NUR für Unit-Tests verwendet.
+# Es enthält zusätzliche Test-Abhängigkeiten (pytest, etc.)
+# ============================================================================
+
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Installiere Test-Abhängigkeiten
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    python3-dev \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Kopiere requirements
+COPY requirements.txt .
+COPY requirements-test.txt .
+
+# Installiere alle Abhängigkeiten (inkl. Test)
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r requirements-test.txt
+
+# Kopiere Anwendungscode
+COPY . .
+
+# Erstelle notwendige Verzeichnisse
+RUN mkdir -p /app/firmware /app/logs /app/test-reports
+
+# Setze Umgebungsvariablen für Tests
+ENV PYTHONPATH=/app
+ENV FLASK_ENV=testing
+
+# Expose Port für Test-Server
+EXPOSE 5000
+
+# Standardbefehl: Führe Tests aus
+CMD ["pytest", "tests/unit/", "-v", "--tb=short"]

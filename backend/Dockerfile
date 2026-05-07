@@ -1,88 +1,73 @@
 # ============================================================================
-# DOCKERFILE FÜR BACKEND API - PRODUKTIONS-OPTIMIERT (Multi-Stage)
+# BACKEND DOCKERFILE - PRODUKTION & TESTS
+# ============================================================================
+# 
+# Version: 2.0
+# Datum: 07.05.2026
+# 
+# Multi-Stage Build:
+# - Stage 1: Builder (nur für Abhängigkeiten)
+# - Stage 2: Production (schlankes Image)
 # ============================================================================
 
 # ----------------------------------------------------------------------------
-# STAGE 1: BUILDER (für Abhängigkeiten)
+# STAGE 1: BUILDER (Abhängigkeiten installieren)
 # ----------------------------------------------------------------------------
 FROM python:3.11-slim AS builder
 
-# ----------------------------------------------------------------------------
-# METADATA (Label für Dokumentation)
-# ----------------------------------------------------------------------------
-LABEL maintainer="IoT Temperature Monitoring System"
-LABEL description="Backend REST API für Temperaturdaten"
-LABEL version="3.0"
-# ----------------------------------------------------------------------------
-# ARBEITSVERZEICHNIS
-# ----------------------------------------------------------------------------
-# Wechselt in das Verzeichnis /app im Container
-# Alle folgenden Befehle werden relativ zu diesem Pfad ausgeführt
 WORKDIR /app
 
-# ----------------------------------------------------------------------------
-# ABHÄNGIGKEITEN INSTALLIEREN
-# ----------------------------------------------------------------------------
-# Zuerst nur die requirements.txt kopieren (optimiertes Caching)
-# Docker cached diesen Layer solange sich requirements.txt nicht ändert
-# Das spart Zeit bei Neubuilds, weil pip install nicht wiederholt wird
+# Installiere Build-Abhängigkeiten (falls nötig für psycopg2)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    python3-dev \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Kopiere requirements und installiere Abhängigkeiten
 COPY requirements.txt .
 RUN pip install --no-cache-dir --user -r requirements.txt
 
 # ----------------------------------------------------------------------------
-# STAGE 2: RUNTIME (schmales Produktions-Image)
+# STAGE 2: PRODUCTION (schlankes Image)
 # ----------------------------------------------------------------------------
 FROM python:3.11-slim
 
-# Nur ausführen als nicht-root Benutzer (Sicherheit!)
-RUN addgroup --system app && adduser --system --group app
-
 WORKDIR /app
 
-# Python Pfad für --user Installation setzen
-ENV PATH="/root/.local/bin:$PATH"
+# Installiere Runtime-Abhängigkeiten (nur libpq für psycopg2)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq-dev \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
 
-# Abhängigkeiten aus Builder kopieren
+# Kopiere installierte Pakete vom Builder
 COPY --from=builder /root/.local /root/.local
 
-# ============================================================================
-# ANWENDUNGSCODE KOPIEREN
-# ============================================================================
-# Kopiere alle Dateien aus dem Host (aktuelles Verzeichnis) nach /app im Container
-# Docker ignoriert dabei Dateien aus .dockerignore (falls vorhanden)
+# Stelle sicher, dass die Pakete im PATH sind
+ENV PATH=/root/.local/bin:$PATH
+
+# Kopiere Anwendungscode
 COPY . .
 
-# ----------------------------------------------------------------------------
-# FIRMWARE VERZEICHNIS ERSTELLEN
-# ----------------------------------------------------------------------------
-# Erstelle ein Verzeichnis für OTA Firmware Uploads
-# Existiert bereits auf dem Host, aber muss auch im Container existieren
-# mkdir -p: Erstellt Elternverzeichnisse falls nötig (kein Fehler wenn bereits vorhanden)
-# Firmware Verzeichnis erstellen
-RUN mkdir -p /app/firmware && chown -R app:app /app
+# Erstelle notwendige Verzeichnisse
+RUN mkdir -p /app/firmware /app/logs && \
+    chmod 755 /app/firmware
 
-# Zu nicht-root Benutzer wechseln (Sicherheit!)
+# Erstelle einen nicht-root Benutzer für Sicherheit
+RUN addgroup --system app && \
+    adduser --system --group app && \
+    chown -R app:app /app
+
+# Wechsle zu nicht-root Benutzer
 USER app
 
-# ----------------------------------------------------------------------------
-# PORT EXPOSIEREN
-# ----------------------------------------------------------------------------
-# Dokumentiert dass der Container auf Port 5000 lauscht (Flask Standard)
-# Wichtig: Nur Dokumentation - das eigentliche Port-Mapping erfolgt in docker-compose.yml
+# Expose Port
 EXPOSE 5000
 
-# Gesundheitscheck für Docker
+# Healthcheck (mit curl für bessere Kompatibilität)
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
   CMD curl -f http://localhost:5000/api/health || exit 1
 
-# ----------------------------------------------------------------------------
-# STARTKOMMANDO
-# ----------------------------------------------------------------------------
-# Ausführungs-Befehl wenn der Container startet
-# ["python", "-u", "app.py"]:
-#   -u: Unbuffered Mode (sofortige Log-Ausgabe, wichtig für Docker Logs)
-#   app.py: Hauptanwendungsdatei (Flask API)
-# 
-# Alternative: CMD ["flask", "run", "--host=0.0.0.0", "--port=5000"]
-# Aber mit python -u app.py haben wir mehr Kontrolle  
+# Starte die Applikation
 CMD ["python", "-u", "app.py"]

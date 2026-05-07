@@ -519,6 +519,25 @@ json
     "avg_temp": 23.9,
     "count": 288
 }
+## TDD: Unit und Integration Test
+
+* Alle Tests ausführen: 
+  
+pytest tests/ -v
+
+* Führe credentials tests aus:
+
+pytest tests/unit/test_credentials.py -v
+
+* Führe Integrationstests aus:
+  
+pytest tests/integration/test_api_integration.py -v
+
+* Mit Coverage:
+  
+pytest tests/unit/test_credentials.py -v --cov=. --cov-report=term
+
+
 
 ### 🐛 Fehlersuche
 Bridge startet nicht (pytz fehlt)

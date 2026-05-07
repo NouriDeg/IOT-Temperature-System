@@ -1,0 +1,26 @@
+# ============================================
+# PROVISIONER TEST: ABHÄNGIGKEITEN
+# ============================================
+
+# Test Framework
+pytest==7.4.3
+pytest-cov==4.1.0
+pytest-mock==3.12.0
+pytest-timeout==2.2.0
+pytest-xdist==3.5.0
+
+# Mocking und Test-Daten
+faker==20.1.0
+freezegun==1.4.0
+
+# MQTT Tests
+paho-mqtt==1.6.1
+
+# Datenbank Tests
+psycopg2-binary==2.9.9
+testcontainers==3.7.1
+
+# Code Qualität (optional)
+black==23.11.0
+flake8==6.1.0
+mypy==1.7.0

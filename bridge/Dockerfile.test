@@ -1,0 +1,111 @@
+# ============================================================================
+# DOCKERFILE.TEST: MQTT BRIDGE SERVICE
+# ============================================================================
+# 
+# Version: 1.0
+# Datum: 06.05.2026 
+# 
+# Dieses Dockerfile baut ein Test-Image für die MQTT Bridge.
+# Es wird für Integrationstests und Unit-Tests verwendet.
+# 
+# Getestete Funktionen:
+# - MQTT Nachrichtenempfang und -verarbeitung
+# - JSON Schema Validierung
+# - Datenbank INSERT und UPDATE Operationen
+# - Heartbeat und LWT Verarbeitung
+# - Zeitzonen-Konvertierung
+# ============================================================================
+
+# ============================================================================
+# STAGE 1: BASE (gemeinsame Basis für alle Tests)
+# ============================================================================
+FROM python:3.11-slim AS base
+
+# Setze Arbeitsverzeichnis
+WORKDIR /app
+
+# Setze Umgebungsvariablen für Tests
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV TEST_MODE=true
+ENV LOG_LEVEL=DEBUG
+
+# Installiere System-Abhängigkeiten
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    openssl \
+    curl \
+    mosquitto-clients \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================================
+# STAGE 2: DEPENDENCIES (Installiere Abhängigkeiten)
+# ============================================================================
+FROM base AS dependencies
+
+# Kopiere Produktions-Abhängigkeiten
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Kopiere Test-Abhängigkeiten
+COPY requirements.test.txt .
+RUN pip install --no-cache-dir -r requirements.test.txt
+
+# ============================================================================
+# STAGE 3: TEST (Kopiere Code und führe Tests aus)
+# ============================================================================
+FROM dependencies AS test
+
+# Kopiere Bridge Code
+COPY bridge.py .
+
+# Kopiere Tests
+COPY ../tests/unit/test_bridge.py /app/tests/unit/
+COPY ../tests/integration/test_bridge_integration.py /app/tests/integration/
+COPY ../tests/integration/test_mqtt_integration.py /app/tests/integration/
+COPY ../tests/conftest.py /app/tests/
+
+# Kopiere Hilfsdateien
+COPY ../certs/ca.crt /app/certs/
+COPY ../mosquitto/test_passwd /app/mosquitto/
+
+# Erstelle Ergebnis-Verzeichnisse
+RUN mkdir -p /app/test_results /app/coverage /app/test_logs
+
+# Erstelle Firmware Verzeichnis (für Tests)
+RUN mkdir -p /app/firmware
+
+# Setze Einstiegspunkt für Tests
+ENTRYPOINT ["pytest"]
+
+# Standard: Alle Bridge-Tests ausführen
+CMD ["tests/unit/test_bridge.py", "tests/integration/test_bridge_integration.py", \
+     "-v", "--tb=short", "--strict-markers", \
+     "--cov=.", "--cov-report=html:/app/coverage", "--cov-report=term", \
+     "--junitxml=/app/test_results/results.xml"]
+
+# ============================================================================
+# STAGE 4: MQTT TEST (Mit MQTT Broker Integration)
+# ============================================================================
+FROM test AS mqtt-test
+
+# Installiere zusätzliche MQTT Test-Werkzeuge
+RUN pip install paho-mqtt==1.6.1
+
+# Warte auf MQTT Broker und führe Tests aus
+CMD ["sh", "-c", "sleep 5 && pytest tests/integration/test_mqtt_integration.py -v --cov=. --cov-report=term"]
+
+# ============================================================================
+# STAGE 5: BENCHMARK (Performance-Tests)
+# ============================================================================
+FROM test AS benchmark
+
+# Installiere Benchmark-Werkzeuge
+RUN pip install locust==2.20.0
+
+# Kopiere Benchmark Skripte
+COPY ../tests/benchmark/locustfile.py /app/tests/benchmark/
+
+# Benchmark Modus
+CMD ["pytest", "tests/benchmark/", "-v", "--benchmark-only"]

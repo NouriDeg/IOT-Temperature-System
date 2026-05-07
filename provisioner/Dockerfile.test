@@ -1,0 +1,87 @@
+# ============================================================================
+# DOCKERFILE.TEST - PROVISIONER SERVICE
+# ============================================================================
+# 
+# Version: 1.0
+# Datum: 06.05.2026
+# 
+# Dieses Dockerfile baut ein Test-Image für den Provisioning Service.
+# Es wird für Integrationstests und Unit-Tests verwendet.
+# 
+# Unterschiede zum Produktions-Dockerfile:
+# - Installiert Test-Abhängigkeiten (pytest, pytest-cov, etc.)
+# - Aktiviert Test-Modus (DEBUG Logging)
+# - Enthält Test-Code und Fixtures
+# - Startet Tests statt des Services
+# ============================================================================
+
+# ============================================================================
+# STAGE 1: BASE (gemeinsame Basis für alle Tests)
+# ============================================================================
+FROM python:3.11-slim AS base
+
+# Setze Arbeitsverzeichnis
+WORKDIR /app
+
+# Setze Umgebungsvariablen für Tests
+ENV PYTHONPATH=/app
+ENV PYTHONUNBUFFERED=1
+ENV TEST_MODE=true
+ENV LOG_LEVEL=DEBUG
+
+# Installiere System-Abhängigkeiten (für Test-Container und SSL)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    openssl \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# ============================================================================
+# STAGE 2: DEPENDENCIES (Installiere Abhängigkeiten)
+# ============================================================================
+FROM base AS dependencies
+
+# Kopiere Produktions-Abhängigkeiten
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Kopiere Test-Abhängigkeiten
+COPY requirements.test.txt .
+RUN pip install --no-cache-dir -r requirements.test.txt
+
+# ============================================================================
+# STAGE 3: TEST (Kopiere Code und führe Tests aus)
+# ============================================================================
+FROM dependencies AS test
+
+# Kopiere gesamten Code
+COPY . .
+
+# Kopiere Tests aus dem Hauptverzeichnis
+COPY ../tests/unit/test_provisioner.py /app/tests/unit/
+COPY ../tests/integration/test_provisioner_integration.py /app/tests/integration/
+COPY ../tests/conftest.py /app/tests/
+
+# Erstelle Ergebnis-Verzeichnisse
+RUN mkdir -p /app/test_results /app/coverage /app/test_logs
+
+# Setze Einstiegspunkt für Tests
+ENTRYPOINT ["pytest"]
+
+# Standard: Alle Provisioner-Tests ausführen
+CMD ["tests/unit/test_provisioner.py", "tests/integration/test_provisioner_integration.py", \
+     "-v", "--tb=short", "--strict-markers", \
+     "--cov=.", "--cov-report=html:/app/coverage", "--cov-report=term", \
+     "--junitxml=/app/test_results/results.xml"]
+
+# ============================================================================
+# STAGE 4: DEVELOPMENT (Für interaktive Tests)
+# ============================================================================
+FROM test AS dev
+
+# Installiere zusätzliche Entwicklungswerkzeuge
+RUN pip install ipython ipdb
+
+# Starte interaktive Shell für Debugging
+CMD ["ipython"]

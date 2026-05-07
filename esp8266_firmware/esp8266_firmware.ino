@@ -5,7 +5,7 @@
 //
 // Projekt: IoT Temperature Monitoring System
 // Autor: Nouri Deg.
-// Datum: 2026-04-20
+// Datum: 20.04.2026
 // Version: 5.0
 //
 // Funktionen:
