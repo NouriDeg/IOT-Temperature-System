@@ -75,7 +75,7 @@ if not MQTT_PASSWORD:
 
 # Datenbank Konfiguration
 DB_CONFIG = {
-    'host': os.getenv('DB_HOST', '192.168.0.105'),
+    'host': os.getenv('DB_HOST', '192.168.0.106'),
     'port': int(os.getenv('DB_PORT', 5432)),
     'database': os.getenv('DB_NAME', 'sensordb'),
     'user': os.getenv('DB_USER', 'sensor_user'),
@@ -392,7 +392,7 @@ class TestSecurity:
 ])
 def test_endpoints_are_reachable(endpoint):
     """Alle API-Endpunkte sind erreichbar"""
-    full_url = f"http://192.168.0.105:5000{endpoint}"
+    full_url = f"http://192.168.0.106:5000{endpoint}"
     response = requests.get(full_url)
     assert response.status_code in [200, 404]  # 404 ist ok für nicht-existente
 

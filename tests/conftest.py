@@ -15,8 +15,8 @@ import pytest
 # Mock für Flask-CORS (Backend) - immer
 sys.modules['flask_cors'] = MagicMock()
 
-# Diese Mocks werden NUR für Unit-Tests aktiviert, 
-
+# Diese Mocks werden NUR für Unit-Tests aktiviert, nicht für Integration/E2E
+# Sie werden später in pytest_collection_modifyitems basierend auf dem Pfad gesetzt
 
 # ============================================================================
 # FIXTURES
@@ -64,6 +64,7 @@ def pytest_configure(config):
     """Pytest Konfiguration - Definiert Custom Markers"""
     config.addinivalue_line("markers", "unit: Unit tests (schnell, keine externen Abhängigkeiten)")
     config.addinivalue_line("markers", "integration: Integration tests (benötigt laufende Services)")
+    config.addinivalue_line("markers", "e2e: End-to-End tests (benötigt vollständiges System)")
     config.addinivalue_line("markers", "slow: Langsame Tests")
 
 
@@ -77,5 +78,7 @@ def pytest_collection_modifyitems(config, items):
         # Integration Tests im integration/ Ordner - KEINE MOCKS!
         elif "integration/" in str(item.fspath):
             item.add_marker(pytest.mark.integration)
-            
-        
+            # Integrationstests verwenden echte Verbindungen
+        # E2E Tests im e2e/ Ordner
+        elif "e2e/" in str(item.fspath):
+            item.add_marker(pytest.mark.e2e)

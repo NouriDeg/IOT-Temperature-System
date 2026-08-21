@@ -42,7 +42,7 @@ else:
 # ============================================================================
 
 # Beispiel für Broker IP (optional, für Tests)
-TEST_BROKER_IP = os.getenv('MQTT_HOST', '192.168.0.105')
+TEST_BROKER_IP = os.getenv('MQTT_HOST', '192.168.0.106')
 TEST_BROKER_PORT = int(os.getenv('MQTT_PORT_TLS', 8883))
 
 # Mock für paho MQTT vor dem Import von provisioner

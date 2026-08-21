@@ -1,669 +1,334 @@
-// /**
-//  * ============================================
-//  * IoT DASHBOARD - JAVASCRIPT
-//  * ============================================
-//  * 
-//  * Funktionen:
-//  * - Live-Datenabfrage über REST API
-//  * - Automatische Aktualisierung alle 10 Sekunden
-//  * - Chart.js Diagramm für Temperaturverlauf
-//  * - OTA Firmware Upload
-//  * - LWT Status Anzeige
-//  * 
-//  * API Endpoints:
-//  * - GET /api/latest - Aktuelle Temperatur
-//  * - GET /api/stats - Statistiken
-//  * - GET /api/devices/status - Gerätestatus
-//  * - GET /api/lwt/stats - LWT Statistiken
-//  * - GET /api/firmware/version - Firmware Version
-//  * - POST /api/firmware/upload - Firmware Upload
-//  * 
-//  *  Autor: Nouri deg.
-//  * @version 2.0
-//  * @date 29.04.2026
-//  * ============================================
-//  */
-
-// // API Basis-URL (Backend)
-// const API_BASE = 'http://192.168.0.105:5000/api';
-
-// // Chart.js Diagramm-Instanz (global für Updates)
-// let chart = null;
-
-// /**
-//  * Lädt die aktuellste Temperatur vom Backend
-//  * Endpoint: GET /api/latest
-//  * 
-//  * Aktualisiert:
-//  * - Aktuelle Temperatur (rot, groß)
-//  * - Geräte-ID
-//  * - Letzte Messung (gelb, größer)
-//  */
-// async function fetchLatest() {
-//     try {
-//         const response = await fetch(`${API_BASE}/latest`);
-//         const data = await response.json();
-        
-//         if (!data.error) {
-//             // Temperatur anzeigen (2 Nachkommastellen)
-//             document.getElementById('current-temp').innerHTML = data.temperature.toFixed(2) + ' °C';
-//             document.getElementById('current-device').innerHTML = '📟 Gerät: ' + data.device_id;
-            
-//             // Letzte Messung - GELB und GRÖSSER (special class)
-//             const lastTimeElement = document.getElementById('current-time');
-//             const formattedDate = new Date(data.timestamp).toLocaleString('de-DE', {
-//                 day: '2-digit',
-//                 month: '2-digit',
-//                 year: 'numeric',
-//                 hour: '2-digit',
-//                 minute: '2-digit',
-//                 second: '2-digit'
-//             });
-//             lastTimeElement.innerHTML = '🕐 Letzte Messung: ' + formattedDate;
-//         }
-//     } catch (error) {
-//         console.error('Fehler beim Laden der aktuellen Temperatur:', error);
-//     }
-// }
-
-// /**
-//  * Lädt Statistiken der letzten 24 Stunden
-//  * Endpoint: GET /api/stats?hours=24
-//  * 
-//  * Aktualisiert:
-//  * - Minimale Temperatur
-//  * - Maximale Temperatur
-//  * - Durchschnittstemperatur
-//  * - Anzahl der Messungen
-//  */
-// async function fetchStats() {
-//     try {
-//         const response = await fetch(`${API_BASE}/stats?hours=24`);
-//         const data = await response.json();
-        
-//         if (!data.error) {
-//             document.getElementById('min-temp').innerHTML = data.min_temp?.toFixed(2) || '--';
-//             document.getElementById('max-temp').innerHTML = data.max_temp?.toFixed(2) || '--';
-//             document.getElementById('avg-temp').innerHTML = data.avg_temp?.toFixed(2) || '--';
-//             document.getElementById('count').innerHTML = data.count || 0;
-//         }
-//     } catch (error) {
-//         console.error('Fehler beim Laden der Statistiken:', error);
-//     }
-// }
-
-// /**
-//  * Lädt den Status aller Geräte
-//  * Endpoint: GET /api/devices/status
-//  * 
-//  * Aktualisiert:
-//  * - Geräteliste mit Status (online/offline)
-//  * - RSSI Signalstärke mit Farbkodierung
-//  * - Heap Speicher
-//  * - Letzte Nachricht
-//  */
-// async function fetchDevicesStatus() {
-//     try {
-//         const response = await fetch(`${API_BASE}/devices/status`);
-//         const data = await response.json();
-        
-//         if (!data.error && data.length > 0) {
-//             let html = '';
-            
-//             data.forEach(device => {
-//                 // Status-Klasse für Farbe
-//                 const statusClass = device.status === 'online' ? 'online' : 'offline';
-                
-//                 // RSSI-Klasse für Signalstärke
-//                 let rssiClass = '';
-//                 if (device.last_rssi) {
-//                     if (device.last_rssi > -60) rssiClass = 'signal-good';
-//                     else if (device.last_rssi > -70) rssiClass = 'signal-medium';
-//                     else rssiClass = 'signal-bad';
-//                 }
-                
-//                 // HTML für jedes Gerät
-//                 html += `
-//                     <div class="device-item">
-//                         <strong>📟 ${escapeHtml(device.device_id)}</strong><br>
-//                         Status: <span class="${statusClass}">${device.status === 'online' ? '🟢 Online' : '🔴 Offline'}</span><br>
-//                         📶 RSSI: <span class="${rssiClass}">${device.last_rssi || '--'} dBm</span><br>
-//                         💾 Heap: ${device.last_free_heap || '--'} bytes<br>
-//                         🕐 Letzte Nachricht: ${device.last_seen ? new Date(device.last_seen).toLocaleString() : 'never'}
-//                     </div>
-//                 `;
-//             });
-            
-//             document.getElementById('devices-list').innerHTML = html;
-//         } else {
-//             document.getElementById('devices-list').innerHTML = '<div class="device-item">Keine Geräte gefunden</div>';
-//         }
-//     } catch (error) {
-//         console.error('Fehler beim Laden der Geräteliste:', error);
-//     }
-// }
-
-// /**
-//  * Lädt LWT (Last Will Testament) Statistiken
-//  * Endpoint: GET /api/lwt/stats
-//  * 
-//  * Aktualisiert:
-//  * - Gesamtanzahl Geräte
-//  * - Online Geräte
-//  * - Offline Geräte
-//  * - Durchschnittliche RSSI
-//  */
-// async function fetchLWTStats() {
-//     try {
-//         const response = await fetch(`${API_BASE}/lwt/stats`);
-//         const data = await response.json();
-        
-//         if (!data.error) {
-//             document.getElementById('total-devices').innerHTML = data.total_devices || 0;
-//             document.getElementById('online-devices').innerHTML = data.online_devices || 0;
-//             document.getElementById('offline-devices').innerHTML = data.offline_devices || 0;
-//             document.getElementById('avg-rssi').innerHTML = data.avg_rssi || '--';
-//         }
-//     } catch (error) {
-//         console.error('Fehler beim Laden der LWT Statistiken:', error);
-//     }
-// }
-
-// /**
-//  * Lädt Informationen über die aktuelle Firmware
-//  * Endpoint: GET /api/firmware/version
-//  * 
-//  * Aktualisiert:
-//  * - Firmware Version
-//  * - Dateigröße in KB
-//  * - MD5 Hash (gekürzt)
-//  */
-// async function fetchFirmwareInfo() {
-//     try {
-//         const response = await fetch(`${API_BASE}/firmware/version`);
-//         const data = await response.json();
-        
-//         if (!data.error) {
-//             const sizeKB = (data.size / 1024).toFixed(2);
-//             document.getElementById('firmware-info').innerHTML = `
-//                 📦 Version: <strong>${data.version}</strong><br>
-//                 📏 Größe: ${sizeKB} KB<br>
-//                 🔑 MD5: ${data.md5?.substring(0, 16) || '---'}...
-//             `;
-//         } else {
-//             document.getElementById('firmware-info').innerHTML = '📦 Keine Firmware vorhanden';
-//         }
-//     } catch (error) {
-//         console.error('Fehler beim Laden der Firmware Info:', error);
-//         document.getElementById('firmware-info').innerHTML = '📦 Fehler beim Laden';
-//     }
-// }
-
-// /**
-//  * Lädt Firmware-Datei hoch und speichert sie auf dem Server
-//  * Endpoint: POST /api/firmware/upload
-//  * 
-//  * @param {File} file - Die ausgewählte .bin Datei
-//  * @param {string} version - Versionsnummer
-//  */
-// async function uploadFirmware() {
-//     const fileInput = document.getElementById('firmware-file');
-//     const versionInput = document.getElementById('firmware-version');
-//     const statusDiv = document.getElementById('upload-status');
-    
-//     // Prüfe ob eine Datei ausgewählt wurde
-//     if (!fileInput.files.length) {
-//         showStatus('❌ Bitte wähle eine Firmware Datei aus', '#ff6666');
-//         return;
-//     }
-    
-//     const file = fileInput.files[0];
-//     const version = versionInput.value.trim() || '1.0.0';
-    
-//     // FormData für Datei-Upload
-//     const formData = new FormData();
-//     formData.append('file', file);
-//     formData.append('version', version);
-    
-//     showStatus('📤 Upload läuft...', '#FFC107');
-    
-//     try {
-//         const response = await fetch(`${API_BASE}/firmware/upload`, {
-//             method: 'POST',
-//             body: formData
-//         });
-//         const data = await response.json();
-        
-//         if (response.ok) {
-//             showStatus(`✅ ${data.message} (Version ${data.version})`, '#4CAF50');
-//             fetchFirmwareInfo(); // Firmware Info aktualisieren
-//         } else {
-//             showStatus(`❌ Fehler: ${data.error}`, '#ff6666');
-//         }
-//     } catch (error) {
-//         showStatus(`❌ Upload fehlgeschlagen: ${error.message}`, '#ff6666');
-//     }
-// }
-
-// /**
-//  * Statusmeldung im Upload-Bereich anzeigen
-//  * @param {string} message - Die anzuzeigende Nachricht
-//  * @param {string} color - Textfarbe (CSS-Farbwert)
-//  */
-// function showStatus(message, color) {
-//     const statusDiv = document.getElementById('upload-status');
-//     statusDiv.innerHTML = message;
-//     statusDiv.style.color = color;
-    
-//     // Nach 5 Sekunden ausblenden
-//     setTimeout(() => {
-//         if (statusDiv.innerHTML === message) {
-//             statusDiv.innerHTML = '';
-//         }
-//     }, 5000);
-// }
-
-// /**
-//  * Löst ein OTA (Over-the-Air) Update aus
-//  * Sendet einen Befehl an den ESP8266 (simuliert)
-//  */
-// async function triggerOTA() {
-//     const btn = event.target;
-//     const originalText = btn.innerHTML;
-    
-//     btn.innerHTML = '⏳ Wird ausgelöst...';
-//     btn.disabled = true;
-    
-//     try {
-//         // Simuliere OTA Update (würde eigentlich MQTT Befehl senden)
-//         await new Promise(resolve => setTimeout(resolve, 2000));
-        
-//         alert('🚀 OTA Update wurde ausgelöst!\n\nDas ESP8266 wird die Firmware herunterladen und aktualisieren.');
-        
-//         btn.innerHTML = originalText;
-//         btn.disabled = false;
-//     } catch (error) {
-//         console.error('Fehler beim OTA Update:', error);
-//         btn.innerHTML = originalText;
-//         btn.disabled = false;
-//     }
-// }
-
-// /**
-//  * Lädt den Temperaturverlauf der letzten 24 Stunden
-//  * Endpoint: GET /api/history?hours=24&limit=200
-//  * 
-//  * Zeichnet ein Chart.js Liniendiagramm mit roter Linie
-//  */
-// async function fetchHistory() {
-//     try {
-//         const response = await fetch(`${API_BASE}/history?hours=24&limit=200`);
-//         const data = await response.json();
-        
-//         if (!data.error && data.length > 0) {
-//             // X-Achse: Zeit (nur Stunden:Minuten)
-//             const times = data.map(d => {
-//                 const date = new Date(d.timestamp);
-//                 return date.toLocaleTimeString('de-DE', { 
-//                     hour: '2-digit', 
-//                     minute: '2-digit' 
-//                 });
-//             });
-            
-//             // Y-Achse: Temperaturwerte
-//             const temps = data.map(d => d.temperature);
-            
-//             // Altes Diagramm zerstören (falls vorhanden)
-//             if (chart) chart.destroy();
-            
-//             // Neues Diagramm zeichnen (rote Linie)
-//             const ctx = document.getElementById('tempChart').getContext('2d');
-//             chart = new Chart(ctx, {
-//                 type: 'line',
-//                 data: {
-//                     labels: times,
-//                     datasets: [{
-//                         label: 'Temperatur (°C)',
-//                         data: temps,
-//                         borderColor: '#ff4444',        // ROTE Linie
-//                         backgroundColor: 'rgba(255, 68, 68, 0.1)',  // Leichter roter Hintergrund
-//                         borderWidth: 2,
-//                         fill: true,
-//                         tension: 0.4,                  // Leichte Kurvenglättung
-//                         pointRadius: 2,
-//                         pointHoverRadius: 5,
-//                         pointBackgroundColor: '#ff4444'
-//                     }]
-//                 },
-//                 options: {
-//                     responsive: true,
-//                     maintainAspectRatio: true,
-//                     plugins: {
-//                         legend: {
-//                             labels: { color: '#ffffff' }  // Weiße Legende
-//                         },
-//                         tooltip: {
-//                             mode: 'index',
-//                             intersect: false
-//                         }
-//                     },
-//                     scales: {
-//                         x: {
-//                             ticks: { 
-//                                 color: '#ffffff',
-//                                 maxRotation: 45,
-//                                 minRotation: 45
-//                             },
-//                             grid: { color: 'rgba(255, 255, 255, 0.1)' }
-//                         },
-//                         y: {
-//                             ticks: { color: '#ffffff' },
-//                             grid: { color: 'rgba(255, 255, 255, 0.1)' }
-//                         }
-//                     }
-//                 }
-//             });
-//         }
-//     } catch (error) {
-//         console.error('Fehler beim Laden des Temperaturverlaufs:', error);
-//     }
-// }
-
-// /**
-//  * HTML Escape gegen XSS-Angriffe
-//  * @param {string} text - Der zu escapende Text
-//  * @returns {string} - Escapeter Text
-//  */
-// function escapeHtml(text) {
-//     const div = document.createElement('div');
-//     div.textContent = text;
-//     return div.innerHTML;
-// }
-
-// // ============================================
-// // AUTOMATISCHE AKTUALISIERUNG
-// // ============================================
-// // Alle 10 Sekunden werden alle Daten neu geladen
-// setInterval(() => {
-//     fetchLatest();
-//     fetchStats();
-//     fetchDevicesStatus();
-//     fetchLWTStats();
-//     fetchHistory();
-//     fetchFirmwareInfo();
-// }, 10000);
-
-// // ============================================
-// // INITIALES LADEN BEIM SEITENSTART
-// // ============================================
-// fetchLatest();
-// fetchStats();
-// fetchDevicesStatus();
-// fetchLWTStats();
-// fetchHistory();
-// fetchFirmwareInfo();
-
-// // Console-Ausgabe für Debugging
-// console.log('🌡️ Dashboard gestartet - Aktualisiert alle 10 Sekunden');
-
 /**
  * ============================================
- * IoT DASHBOARD - JAVASCRIPT
+ * IoT DASHBOARD - ALLE GERÄTE TEMPERATUREN
  * ============================================
  * 
- * Version: 3.0 - Korrigierte API-Endpunkte
- * Datum: 06.05.2026
+ * Version: 6.0
+ * Datum: 16.08.2026
  * 
- * Änderungen:
- * - API_BASE auf richtigen Pfad gesetzt
- * - Fehlerbehandlung verbessert
- * - Debug-Logs hinzugefügt
+ * Funktionen:
+ * - Alle Geräte mit aktuellen Temperaturen
+ * - Statistik (Min, Max, Avg, Count)
+ * - LWT Status (Online/Offline)
+ * - Geräte Status Liste
+ * - OTA Firmware Management
+ * - Temperaturverlauf Diagramm
  * ============================================
  */
 
-// API Basis-URL - muss mit Backend übereinstimmen!
-// Dein Nginx proxied /api/ zu http://api_backend:5000/api/
+// ============================================
+// GLOBALE KONSTANTEN & VARIABLEN
+// ============================================
+
+// Basis-URL für alle API-Aufrufe (relativer Pfad, da Frontend und Backend über Nginx verbunden sind)
 const API_BASE = '/api';
 
-// Chart.js Diagramm-Instanz
+// Chart.js Diagramm-Instanz (wird später initialisiert)
 let chart = null;
 
 // ============================================
-// HILFSFUNKTIONEN
+// 1. API HELPER - Zentrale Funktion für alle API-Aufrufe
 // ============================================
 
 /**
- * API Call mit Fehlerbehandlung
+ * Führt einen asynchronen API-Aufruf durch und gibt die JSON-Daten zurück.
+ * Bei Fehlern wird null zurückgegeben und der Fehler in der Konsole geloggt.
+ * 
+ * @param {string} endpoint - Der API-Endpunkt (z.B. '/devices/status')
+ * @returns {Promise<Object|null>} Die JSON-Antwort oder null bei Fehler
  */
 async function apiCall(endpoint) {
     try {
+        // Vollständige URL aus Basis und Endpunkt zusammensetzen
         const url = `${API_BASE}${endpoint}`;
+        
+        // Debug-Ausgabe in der Browser-Konsole (für Fehlersuche)
         console.log(`📡 API Call: ${url}`);
         
+        // HTTP GET Request an den Server senden
         const response = await fetch(url);
         
+        // Prüfen ob die Antwort erfolgreich war (Status 200-299)
         if (!response.ok) {
-            if (response.status === 404) {
-                console.warn(`⚠️ Endpoint nicht gefunden: ${endpoint}`);
-                return null;
-            }
+            // Bei 404 (Not Found) geben wir null zurück, ohne Fehler zu werfen
+            if (response.status === 404) return null;
+            // Bei anderen Fehlern werfen wir eine Exception
             throw new Error(`HTTP ${response.status}`);
         }
         
-        const data = await response.json();
-        console.log(`✅ ${endpoint}:`, data);
-        return data;
+        // JSON-Daten aus der Antwort parsen und zurückgeben
+        return await response.json();
     } catch (error) {
+        // Fehler in der Konsole ausgeben
         console.error(`❌ Fehler bei ${endpoint}:`, error);
+        // null zurückgeben, damit der Aufrufer nicht abstürzt
         return null;
     }
 }
 
 // ============================================
-// 1. AKTUELLE TEMPERATUR
+// 2. AKTUELLE TEMPERATUREN (ALLE GERÄTE)
 // ============================================
 
-async function fetchLatest() {
-    const data = await apiCall('/latest');
+/**
+ * Ruft alle Geräte mit ihren aktuellen Temperaturen ab und zeigt sie an.
+ * Diese Funktion wird beim Start und alle 10 Sekunden aufgerufen.
+ */
+async function fetchCurrentTemperatures() {
+    // Debug-Ausgabe
+    console.log('🔄 Lade aktuelle Temperaturen...');
     
-    if (data && !data.error) {
-        // Temperatur (ROT, GROSS)
-        const tempElement = document.getElementById('current-temp');
-        if (tempElement) {
-            tempElement.innerHTML = data.temperature.toFixed(2) + ' °C';
-        }
-        
-        // Geräte-ID
-        const deviceElement = document.getElementById('current-device');
-        if (deviceElement) {
-            deviceElement.innerHTML = '📟 Gerät: ' + data.device_id;
-        }
-        
-        // Letzte Messung (GELB, GRÖSSER)
-        const timeElement = document.getElementById('current-time');
-        if (timeElement && data.timestamp) {
-            const formattedDate = new Date(data.timestamp).toLocaleString('de-DE', {
-                day: '2-digit',
-                month: '2-digit',
-                year: 'numeric',
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit'
-            });
-            timeElement.innerHTML = '🕐 Letzte Messung: ' + formattedDate;
-        }
-    } else {
-        console.warn('Keine aktuellen Temperaturdaten');
-        const tempElement = document.getElementById('current-temp');
-        if (tempElement) tempElement.innerHTML = '--.- °C';
+    // HTML-Container für die Temperatur-Anzeige finden
+    const container = document.getElementById('current-temps-container');
+    
+    // Sicherheitsprüfung: Wenn der Container nicht existiert, abbrechen
+    if (!container) {
+        console.error('❌ Container #current-temps-container nicht gefunden!');
+        return;
     }
+
+    // API-Aufruf: Alle Geräte mit Status und Temperatur abrufen
+    const devices = await apiCall('/devices/status');
+    
+    // Prüfen ob Geräte vorhanden sind
+    if (!devices || devices.length === 0) {
+        // Fehlermeldung im Container anzeigen
+        container.innerHTML = '<div class="loading">⚠️ Keine Geräte gefunden</div>';
+        return;
+    }
+
+    // Debug: Anzahl der gefundenen Geräte anzeigen
+    console.log(`📊 ${devices.length} Geräte gefunden`);
+
+    // HTML-Code für alle Geräte zusammenbauen
+    let html = '';
+    
+    // Jedes Gerät durchlaufen und eine Zeile im HTML erstellen
+    devices.forEach(device => {
+        // Prüfen ob das Gerät online ist (Status aus der API)
+        const isOnline = device.status === 'online';
+        
+        // Temperatur auslesen (kann null oder undefined sein)
+        const temp = device.last_temperature;
+        
+        // Temperatur formatieren: Bei Online und vorhandenem Wert mit 2 Nachkommastellen, sonst "--"
+        const tempDisplay = isOnline && temp !== null && temp !== undefined 
+            ? temp.toFixed(2) 
+            : '--';
+        
+        // CSS-Klasse für Online/Offline-Status
+        const statusClass = isOnline ? 'online' : 'offline';
+        
+        // Anzeigetext für Status (mit Emoji)
+        const statusText = isOnline ? '🟢 Online' : '🔴 Offline';
+        
+        // Letzte Nachricht formatieren: Datum in deutsches Format umwandeln
+        const lastSeen = device.last_seen 
+            ? new Date(device.last_seen).toLocaleString('de-DE') 
+            : 'Nie';
+
+        // HTML-Zeile für dieses Gerät erstellen
+        html += `
+            <div class="current-temp-item">
+                <span class="device-id">📟 ${escapeHtml(device.device_id)}</span>
+                <span class="device-temp ${!isOnline ? 'offline' : ''}">${tempDisplay} °C</span>
+                <span class="device-status ${statusClass}">${statusText}</span>
+                <span class="last-seen">${lastSeen}</span>
+            </div>
+        `;
+    });
+
+    // HTML-Code in den Container einfügen
+    container.innerHTML = html;
+    
+    // Debug: Erfolgsmeldung
+    console.log('✅ Aktuelle Temperaturen gerendert');
 }
 
 // ============================================
-// 2. STATISTIKEN
+// 3. STATISTIK (letzte 24h)
 // ============================================
 
+/**
+ * Ruft statistische Kennzahlen der letzten 24 Stunden ab und zeigt sie an.
+ * Werte: Minimum, Maximum, Durchschnitt, Anzahl Messungen
+ */
 async function fetchStats() {
+    // API-Aufruf: Statistiken für die letzten 24 Stunden
     const data = await apiCall('/stats?hours=24');
     
+    // Prüfen ob Daten vorhanden sind
     if (data && !data.error) {
-        const minEl = document.getElementById('min-temp');
-        const maxEl = document.getElementById('max-temp');
-        const avgEl = document.getElementById('avg-temp');
-        const countEl = document.getElementById('count');
-        
-        if (minEl) minEl.innerHTML = data.min_temp?.toFixed(2) || '--';
-        if (maxEl) maxEl.innerHTML = data.max_temp?.toFixed(2) || '--';
-        if (avgEl) avgEl.innerHTML = data.avg_temp?.toFixed(2) || '--';
-        if (countEl) countEl.innerHTML = data.count || 0;
+        // Jedes Statistik-Feld im HTML aktualisieren
+        // Falls kein Wert vorhanden, wird "--" angezeigt
+        document.getElementById('min-temp').textContent = data.min_temp?.toFixed(2) || '--';
+        document.getElementById('max-temp').textContent = data.max_temp?.toFixed(2) || '--';
+        document.getElementById('avg-temp').textContent = data.avg_temp?.toFixed(2) || '--';
+        document.getElementById('count').textContent = data.count || 0;
     }
 }
 
 // ============================================
-// 3. GERÄTESTATUS
+// 4. LWT STATUS (Last Will Testament)
 // ============================================
 
-async function fetchDevicesStatus() {
-    const data = await apiCall('/devices/status');
-    const container = document.getElementById('devices-list');
-    
-    if (!container) return;
-    
-    if (data && !data.error && data.length > 0) {
-        let html = '';
-        
-        data.forEach(device => {
-            const statusClass = device.status === 'online' ? 'online' : 'offline';
-            const statusText = device.status === 'online' ? '🟢 Online' : '🔴 Offline';
-            
-            let rssiClass = '';
-            if (device.last_rssi) {
-                if (device.last_rssi > -60) rssiClass = 'signal-good';
-                else if (device.last_rssi > -70) rssiClass = 'signal-medium';
-                else rssiClass = 'signal-bad';
-            }
-            
-            html += `
-                <div class="device-item">
-                    <strong>📟 ${escapeHtml(device.device_id)}</strong><br>
-                    Status: <span class="${statusClass}">${statusText}</span><br>
-                    📶 RSSI: <span class="${rssiClass}">${device.last_rssi || '--'} dBm</span><br>
-                    💾 Heap: ${device.last_free_heap || '--'} bytes<br>
-                    🕐 Letzte Nachricht: ${device.last_seen ? new Date(device.last_seen).toLocaleString() : 'never'}
-                </div>
-            `;
-        });
-        
-        container.innerHTML = html;
-    } else {
-        container.innerHTML = '<div class="device-item">Keine Geräte gefunden</div>';
-    }
-}
-
-// ============================================
-// 4. LWT STATISTIKEN
-// ============================================
-
+/**
+ * Ruft LWT-Statistiken ab: Gesamtgeräte, Online/Offline, durchschnittliche RSSI.
+ * LWT = Last Will Testament - ein Mechanismus, der den Online-Status der Geräte überwacht.
+ */
 async function fetchLWTStats() {
+    // API-Aufruf: LWT-Statistiken
     const data = await apiCall('/lwt/stats');
     
     if (data && !data.error) {
-        const totalEl = document.getElementById('total-devices');
-        const onlineEl = document.getElementById('online-devices');
-        const offlineEl = document.getElementById('offline-devices');
-        const avgRssiEl = document.getElementById('avg-rssi');
-        
-        if (totalEl) totalEl.innerHTML = data.total_devices || 0;
-        if (onlineEl) onlineEl.innerHTML = data.online_devices || 0;
-        if (offlineEl) offlineEl.innerHTML = data.offline_devices || 0;
-        if (avgRssiEl) avgRssiEl.innerHTML = data.avg_rssi || '--';
+        // Alle LWT-Felder im HTML aktualisieren
+        document.getElementById('total-devices').textContent = data.total_devices || 0;
+        document.getElementById('online-devices').textContent = data.online_devices || 0;
+        document.getElementById('offline-devices').textContent = data.offline_devices || 0;
+        document.getElementById('avg-rssi').textContent = data.avg_rssi?.toFixed(2) || '--';
     }
 }
 
 // ============================================
-// 5. FIRMWARE INFO
+// 5. GERÄTE STATUS (DETAILLISTE)
 // ============================================
 
-async function fetchFirmwareInfo() {
-    const data = await apiCall('/firmware/version');
-    const container = document.getElementById('firmware-info');
-    
+/**
+ * Zeigt eine detaillierte Liste aller Geräte mit Status, Temperatur, RSSI, Heap und letzter Nachricht.
+ * Diese Liste wird in der mittleren Karte des Dashboards angezeigt.
+ */
+async function fetchDevicesStatus() {
+    // HTML-Container für die Geräteliste finden
+    const container = document.getElementById('devices-list');
     if (!container) return;
+
+    // API-Aufruf: Alle Geräte mit Status
+    const devices = await apiCall('/devices/status');
     
-    if (data && !data.error) {
-        const sizeKB = (data.size / 1024).toFixed(2);
-        container.innerHTML = `
-            📦 Version: <strong>${data.version}</strong><br>
-            📏 Größe: ${sizeKB} KB<br>
-            🔑 MD5: ${data.md5?.substring(0, 16) || '---'}...
-        `;
-    } else {
-        container.innerHTML = '📦 Keine Firmware vorhanden';
+    // Prüfen ob Geräte vorhanden sind
+    if (!devices || devices.length === 0) {
+        container.innerHTML = '<div class="loading">⚠️ Keine Geräte gefunden</div>';
+        return;
     }
+
+    // HTML-Code für die Geräteliste zusammenbauen
+    let html = '';
+    devices.forEach(device => {
+        // Status prüfen
+        const isOnline = device.status === 'online';
+        const statusClass = isOnline ? 'online' : 'offline';
+        const statusText = isOnline ? '🟢 Online' : '🔴 Offline';
+        
+        // Temperatur formatieren
+        const temp = device.last_temperature;
+        const tempDisplay = isOnline && temp !== null && temp !== undefined 
+            ? temp.toFixed(2) 
+            : '--';
+        
+        // Letzte Nachricht formatieren
+        const lastSeen = device.last_seen 
+            ? new Date(device.last_seen).toLocaleString('de-DE') 
+            : 'Nie';
+
+        // HTML-Eintrag für dieses Gerät erstellen
+        html += `
+            <div class="device-item">
+                <!-- Geräte-ID (fett) -->
+                <div class="device-name">📟 ${escapeHtml(device.device_id)}</div>
+                <!-- Status, Temperatur, RSSI, Heap in einer Zeile -->
+                <div>
+                    Status: <span class="device-status ${statusClass}">${statusText}</span>
+                    &nbsp;|&nbsp; 🌡️ ${tempDisplay} °C
+                    &nbsp;|&nbsp; 📶 ${device.last_rssi || '--'} dBm
+                    &nbsp;|&nbsp; 💾 ${device.last_free_heap || '--'} bytes
+                </div>
+                <!-- Letzte Nachricht (kleiner, grau) -->
+                <div class="device-details">🕐 Letzte Nachricht: ${lastSeen}</div>
+            </div>
+        `;
+    });
+
+    // HTML in den Container einfügen
+    container.innerHTML = html;
 }
 
 // ============================================
 // 6. TEMPERATURVERLAUF (DIAGRAMM)
 // ============================================
 
+/**
+ * Ruft den Temperaturverlauf der letzten 24 Stunden ab und zeichnet ein Diagramm mit Chart.js.
+ * Die Daten werden als Zeitreihe dargestellt.
+ */
 async function fetchHistory() {
+    // API-Aufruf: Historische Daten (max. 200 Punkte)
     const data = await apiCall('/history?hours=24&limit=200');
     
-    if (data && !data.error && data.length > 0) {
+    // Prüfen ob Daten vorhanden sind
+    if (data && data.length > 0) {
+        // Zeitstempel für die X-Achse extrahieren (nur Uhrzeit)
         const times = data.map(d => {
             const date = new Date(d.timestamp);
+            // Format: "HH:MM" (z.B. "14:30")
             return date.toLocaleTimeString('de-DE', { 
                 hour: '2-digit', 
                 minute: '2-digit' 
             });
         });
         
+        // Temperaturwerte für die Y-Achse extrahieren
         const temps = data.map(d => d.temperature);
-        
-        // Altes Diagramm zerstören
+
+        // Altes Diagramm zerstören (falls vorhanden), um Speicherlecks zu vermeiden
         if (chart) chart.destroy();
-        
-        // Neues Diagramm zeichnen
+
+        // Canvas-Element für das Diagramm finden
         const ctx = document.getElementById('tempChart');
         if (ctx) {
+            // Neues Chart.js-Diagramm erstellen
             chart = new Chart(ctx, {
+                // Diagramm-Typ: Liniendiagramm
                 type: 'line',
                 data: {
-                    labels: times,
+                    labels: times,           // X-Achse: Zeitstempel
                     datasets: [{
                         label: 'Temperatur (°C)',
-                        data: temps,
-                        borderColor: '#ff4444',
-                        backgroundColor: 'rgba(255, 68, 68, 0.1)',
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.4,
-                        pointRadius: 2,
-                        pointHoverRadius: 5,
-                        pointBackgroundColor: '#ff4444'
+                        data: temps,         // Y-Achse: Temperaturwerte
+                        borderColor: '#ff4444',        // Linienfarbe: Rot
+                        backgroundColor: 'rgba(255, 68, 68, 0.1)', // Füllfarbe: Rot mit Transparenz
+                        borderWidth: 2,                 // Liniendicke
+                        fill: true,                     // Fläche unter der Linie füllen
+                        tension: 0.4,                   // Kurvenglättung (0.4 = leicht gerundet)
+                        pointRadius: 2,                 // Größe der Datenpunkte
+                        pointHoverRadius: 5,            // Größe beim Hovern
+                        pointBackgroundColor: '#ff4444' // Farbe der Datenpunkte
                     }]
                 },
                 options: {
+                    // Diagramm reagiert auf Fenstergrößenänderungen
                     responsive: true,
                     maintainAspectRatio: true,
                     plugins: {
+                        // Legende (oben rechts)
                         legend: {
-                            labels: { color: '#ffffff' }
+                            labels: { color: '#ffffff' } // Weiße Schrift
                         }
                     },
                     scales: {
+                        // X-Achse (Zeit)
                         x: {
                             ticks: { 
-                                color: '#ffffff',
-                                maxRotation: 45,
-                                minRotation: 45,
-                                autoSkip: true,
-                                maxTicksLimit: 12
+                                color: '#ffffff',        // Weiße Schrift
+                                maxRotation: 45,         // Max. Drehung der Labels
+                                minRotation: 45,         // Min. Drehung der Labels
+                                autoSkip: true,          // Labels automatisch ausdünnen
+                                maxTicksLimit: 12        // Max. 12 Labels anzeigen
                             },
-                            grid: { color: 'rgba(255, 255, 255, 0.1)' }
+                            grid: { color: 'rgba(255, 255, 255, 0.1)' } // Helle Gitterlinien
                         },
+                        // Y-Achse (Temperatur)
                         y: {
-                            ticks: { color: '#ffffff' },
+                            ticks: { color: '#ffffff' }, // Weiße Schrift
                             grid: { color: 'rgba(255, 255, 255, 0.1)' },
                             title: {
                                 display: true,
@@ -674,46 +339,81 @@ async function fetchHistory() {
                     }
                 }
             });
+            // Debug: Anzahl der Datenpunkte ausgeben
             console.log(`📊 Diagramm gezeichnet mit ${data.length} Datenpunkten`);
         }
-    } else {
-        console.warn('Keine History-Daten für Diagramm');
     }
 }
 
 // ============================================
-// 7. FIRMWARE UPLOAD
+// 7. OTA FIRMWARE MANAGEMENT
 // ============================================
 
+/**
+ * Ruft Informationen über die aktuelle Firmware ab (Version, Größe, MD5).
+ * Wird in der OTA-Karte angezeigt.
+ */
+async function fetchFirmwareInfo() {
+    // API-Aufruf: Firmware-Informationen
+    const data = await apiCall('/firmware/version');
+    const container = document.getElementById('firmware-info');
+    if (!container) return;
+
+    if (data && !data.error) {
+        // Größe von Bytes in KB umrechnen
+        const sizeKB = (data.size / 1024).toFixed(2);
+        // HTML für die Firmware-Info erstellen
+        container.innerHTML = `
+            📦 Version: <strong>${data.version}</strong><br>
+            📏 Größe: ${sizeKB} KB<br>
+            🔑 MD5: ${data.md5?.substring(0, 16) || '---'}...
+        `;
+    } else {
+        // Keine Firmware vorhanden
+        container.innerHTML = '📦 Keine Firmware vorhanden';
+    }
+}
+
+/**
+ * Lädt eine neue Firmware-Datei (.bin) auf den Server hoch.
+ * Wird über den "Firmware hochladen" Button ausgelöst.
+ */
 async function uploadFirmware() {
+    // HTML-Elemente aus dem Formular holen
     const fileInput = document.getElementById('firmware-file');
     const versionInput = document.getElementById('firmware-version');
     const statusDiv = document.getElementById('upload-status');
-    
+
+    // Prüfen ob eine Datei ausgewählt wurde
     if (!fileInput || !fileInput.files.length) {
-        if (statusDiv) showStatus('❌ Bitte wähle eine Firmware Datei aus', '#ff6666');
+        showStatus('❌ Bitte wähle eine Firmware Datei aus', '#ff6666');
         return;
     }
-    
+
+    // Datei und Version auslesen
     const file = fileInput.files[0];
     const version = versionInput?.value.trim() || '1.0.0';
-    
+
+    // FormData für den Upload vorbereiten (multipart/form-data)
     const formData = new FormData();
     formData.append('file', file);
     formData.append('version', version);
-    
-    if (statusDiv) showStatus('📤 Upload läuft...', '#FFC107');
-    
+
+    // Status: Upload läuft
+    showStatus('📤 Upload läuft...', '#FFC107');
+
     try {
+        // POST Request an den Upload-Endpunkt
         const response = await fetch(`${API_BASE}/firmware/upload`, {
             method: 'POST',
             body: formData
         });
         const data = await response.json();
-        
+
+        // Erfolg oder Fehler anzeigen
         if (response.ok) {
             showStatus(`✅ Upload erfolgreich (Version ${data.version})`, '#4CAF50');
-            fetchFirmwareInfo();
+            fetchFirmwareInfo(); // Firmware-Info aktualisieren
         } else {
             showStatus(`❌ Fehler: ${data.error}`, '#ff6666');
         }
@@ -722,36 +422,33 @@ async function uploadFirmware() {
     }
 }
 
-// ============================================
-// 8. OTA UPDATE AUSLÖSEN
-// ============================================
-
-async function triggerOTA() {
-    const btn = event?.target;
-    if (btn) {
-        const originalText = btn.innerHTML;
-        btn.innerHTML = '⏳ Wird ausgelöst...';
-        btn.disabled = true;
-        
-        // Hier müsste ein MQTT Befehl an den ESP8266 gesendet werden
-        // Aktuell: Simulation
-        setTimeout(() => {
-            alert('🚀 OTA Update wurde ausgelöst!\n\nDas ESP8266 wird die Firmware herunterladen.');
-            btn.innerHTML = originalText;
-            btn.disabled = false;
-        }, 2000);
-    }
+/**
+ * Löst ein OTA-Update für alle Geräte aus.
+ * Aktuell wird nur eine Bestätigung angezeigt (Simulation).
+ */
+function triggerOTA() {
+    // Alert anzeigen (später durch echten MQTT-Befehl ersetzbar)
+    alert('🚀 OTA Update wurde ausgelöst!\n\nDas ESP8266 wird die Firmware herunterladen und installieren.');
 }
 
 // ============================================
-// 9. HILFSFUNKTIONEN
+// 8. HILFSFUNKTIONEN
 // ============================================
 
+/**
+ * Zeigt eine Statusmeldung im Upload-Bereich an.
+ * Die Meldung verschwindet nach 5 Sekunden automatisch.
+ * 
+ * @param {string} message - Die anzuzeigende Nachricht
+ * @param {string} color - Die Farbe des Texts (CSS-Farbwert)
+ */
 function showStatus(message, color) {
     const statusDiv = document.getElementById('upload-status');
     if (statusDiv) {
+        // Nachricht und Farbe setzen
         statusDiv.innerHTML = message;
         statusDiv.style.color = color;
+        // Nach 5 Sekunden löschen (nur wenn keine neue Nachricht kam)
         setTimeout(() => {
             if (statusDiv.innerHTML === message) {
                 statusDiv.innerHTML = '';
@@ -760,32 +457,62 @@ function showStatus(message, color) {
     }
 }
 
+/**
+ * Entfernt gefährliche HTML-Zeichen aus einem Text, um XSS-Angriffe zu verhindern.
+ * Wandelt z.B. "<" in "&lt;" um.
+ * 
+ * @param {string} text - Der zu bereinigende Text
+ * @returns {string} Der bereinigte Text
+ */
 function escapeHtml(text) {
+    // Temporäres DIV-Element erstellen
     const div = document.createElement('div');
+    // Text als reinen Text setzen (automatische Escaping)
     div.textContent = text;
+    // HTML-kodierten Text zurückgeben
     return div.innerHTML;
 }
 
 // ============================================
-// DASHBOARD INITIALISIERUNG
+// 9. DASHBOARD INITIALISIERUNG
 // ============================================
 
-// Alle 10 Sekunden aktualisieren
+// Debug: Startmeldung in der Konsole
+console.log('🌡️ Dashboard v6.0 gestartet');
+
+// --------------------------------------------
+// INITIALES LADEN (beim ersten Seitenaufruf)
+// --------------------------------------------
+
+// Alle Daten einmalig beim Start laden
+fetchCurrentTemperatures();   // Aktuelle Temperaturen aller Geräte
+fetchStats();                // Statistik der letzten 24h
+fetchLWTStats();             // LWT Status (Online/Offline)
+fetchDevicesStatus();        // Detaillierte Geräteliste
+fetchHistory();              // Temperaturverlauf (Diagramm)
+fetchFirmwareInfo();         // OTA Firmware Informationen
+
+// --------------------------------------------
+// LIVE-UPDATE (alle 10 Sekunden)
+// --------------------------------------------
+
+/**
+ * Automatische Aktualisierung aller Daten im 10-Sekunden-Takt.
+ * So bleibt das Dashboard immer auf dem neuesten Stand.
+ */
 setInterval(() => {
+    // Debug: Aktualisierung in der Konsole anzeigen
     console.log('🔄 Automatische Aktualisierung...');
-    fetchLatest();
+    
+    // Alle Daten neu laden
+    fetchCurrentTemperatures();
     fetchStats();
-    fetchDevicesStatus();
     fetchLWTStats();
+    fetchDevicesStatus();
     fetchHistory();
     fetchFirmwareInfo();
-}, 10000);
+}, 10000); // 10.000 Millisekunden = 10 Sekunden
 
-// Initiales Laden
-console.log('🌡️ Dashboard gestartet v3.0');
-fetchLatest();
-fetchStats();
-fetchDevicesStatus();
-fetchLWTStats();
-fetchHistory();
-fetchFirmwareInfo();
+// ============================================
+// ENDE DER DASHBOARD.JS
+// ============================================

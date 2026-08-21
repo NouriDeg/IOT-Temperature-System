@@ -70,12 +70,22 @@ secrets/
 certs/
 !certs/.gitkeep
 mosquitto/passwd/passwd_file
+mosquitto/passwd/passwd_fil
+mosquitto/config
+mosquitto/certs
 mosquitto/passwd/*.db
 mosquitto/data/
 mosquitto/log/
 config.json
 *.env
 secrets/
+temp_certs/
+temp_passwd/
+client    
+client-python 
+client-ts
+wss-demo/config.json
+passwd_file 
 # ============================================
 # Datenbank
 # ============================================
@@ -104,7 +114,19 @@ esp8266/build/
 *.d
 *.o
 *.elf 
+# Sensitive data - NEVER commit these files!
+secrets.h
+ota_config.h
+*.pem
+*.crt
+*.key
+*.passwd
 
+# IDE and build artifacts
+.idea/
+.vscode/
+*.ino.bin
+*.ino.dSYM/
 # ============================================
 # OS spezifisch
 # ============================================

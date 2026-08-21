@@ -1,73 +1,30 @@
-# ============================================================================
-# BACKEND DOCKERFILE - PRODUKTION & TESTS
-# ============================================================================
-# 
-# Version: 2.0
-# Datum: 07.05.2026
-# 
-# Multi-Stage Build:
-# - Stage 1: Builder (nur für Abhängigkeiten)
-# - Stage 2: Production (schlankes Image)
-# ============================================================================
-
-# ----------------------------------------------------------------------------
-# STAGE 1: BUILDER (Abhängigkeiten installieren)
-# ----------------------------------------------------------------------------
-FROM python:3.11-slim AS builder
-
-WORKDIR /app
-
-# Installiere Build-Abhängigkeiten (falls nötig für psycopg2)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    python3-dev \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
-
-# Kopiere requirements und installiere Abhängigkeiten
-COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
-
-# ----------------------------------------------------------------------------
-# STAGE 2: PRODUCTION (schlankes Image)
-# ----------------------------------------------------------------------------
+# backend/Dockerfile
 FROM python:3.11-slim
 
+# Setze Arbeitsverzeichnis
 WORKDIR /app
 
-# Installiere Runtime-Abhängigkeiten (nur libpq für psycopg2)
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev \
-    curl \
-    && rm -rf /var/lib/apt/lists/*
+# Kopiere requirements zuerst (für besseren Cache)
+COPY requirements.txt .
 
-# Kopiere installierte Pakete vom Builder
-COPY --from=builder /root/.local /root/.local
+# Zeige requirements Inhalt (Debug)
+RUN echo "=== requirements.txt ===" && cat requirements.txt
 
-# Stelle sicher, dass die Pakete im PATH sind
-ENV PATH=/root/.local/bin:$PATH
+# Installiere Abhängigkeiten mit verbose output
+RUN pip install --no-cache-dir -v -r requirements.txt
 
-# Kopiere Anwendungscode
+# Kopiere den Rest des Codes
 COPY . .
 
-# Erstelle notwendige Verzeichnisse
-RUN mkdir -p /app/firmware /app/logs && \
-    chmod 755 /app/firmware
-
-# Erstelle einen nicht-root Benutzer für Sicherheit
-RUN addgroup --system app && \
-    adduser --system --group app && \
-    chown -R app:app /app
-
-# Wechsle zu nicht-root Benutzer
-USER app
+# Erstelle Firmware Verzeichnis
+RUN mkdir -p /app/firmware
 
 # Expose Port
 EXPOSE 5000
 
-# Healthcheck (mit curl für bessere Kompatibilität)
+# Healthcheck
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:5000/api/health || exit 1
+  CMD python -c "import requests; requests.get('http://localhost:5000/api/health')" || exit 1
 
 # Starte die Applikation
 CMD ["python", "-u", "app.py"]

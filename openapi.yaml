@@ -1,0 +1,750 @@
+# ============================================================
+# OPENAPI 3.0.0 - IoT TEMPERATURE MONITORING SYSTEM
+# ============================================================
+# Diese Spezifikation beschreibt die REST-API für das
+# IoT Temperature Monitoring System.
+# ============================================================
+
+openapi: 3.0.0
+
+# ============================================================
+# API-INFORMATIONEN
+# ============================================================
+info:
+  title: IoT Temperature Monitoring System - Backend API
+  description: |
+    REST API für das IoT Temperature Monitoring System.
+    Bietet Zugriff auf Temperaturdaten, Gerätestatus, LWT-Statistiken und OTA-Firmware-Management.
+    
+    ## Systemübersicht
+    - **ESP8266** sendet Temperaturdaten über MQTT
+    - **MQTT Bridge** speichert Daten in PostgreSQL
+    - **Backend API** stellt Daten als REST-Endpunkte bereit
+    - **Frontend** visualisiert die Daten
+  version: 2.0.0
+  contact:
+    name: IoT Temperature Monitoring System
+    email: support@iot-system.local
+  license:
+    name: MIT License
+    url: https://opensource.org/licenses/MIT
+
+# ============================================================
+# SERVER-KONFIGURATION
+# ============================================================
+# Hier werden die verfügbaren Server-URLs definiert
+# ============================================================
+servers:
+  - url: http://192.168.0.106:5000/api
+    description: Lokale Entwicklungsumgebung
+  - url: https://api.iot-system.local/api
+    description: Produktions-API (HTTPS)
+  - url: http://localhost:5000/api
+    description: Lokaler Entwicklungsserver
+
+# ============================================================
+# TAGS / KATEGORIEN
+# ============================================================
+# Tags gruppieren die Endpunkte für bessere Übersicht
+# ============================================================
+tags:
+  - name: Health
+    description: System- und Datenbank-Health-Checks
+  - name: Temperature
+    description: Temperaturdaten-Endpunkte
+  - name: Statistics
+    description: Statistische Auswertungen
+  - name: History
+    description: Historische Temperaturverläufe
+  - name: Devices
+    description: Geräte-Status und -Verwaltung
+  - name: LWT
+    description: Last Will Testament - Geräte-Online/Offline-Status
+  - name: Firmware
+    description: OTA (Over-the-Air) Firmware-Management
+
+# ============================================================
+# API-ENDPUNKTE (PATHS)
+# ============================================================
+
+paths:
+  # ----------------------------------------------------------
+  # HEALTH-CHECK ENDPOINT
+  # ----------------------------------------------------------
+  # Prüft den Systemstatus und die Datenbankverbindung
+  # ----------------------------------------------------------
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health Check
+      description: |
+        Prüft den Systemstatus und die Datenbankverbindung.
+        Wird für Monitoring und Health-Checks verwendet.
+      operationId: getHealth
+      responses:
+        '200':
+          description: System ist gesund
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                status: healthy
+                database: connected
+                timezone: Europe/Berlin
+                server_time: "2026-05-07T10:30:00+02:00"
+        '500':
+          description: System ist nicht gesund
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                status: unhealthy
+                error: "Database connection failed"
+
+  # ----------------------------------------------------------
+  # AKTUELLSTE TEMPERATUR
+  # ----------------------------------------------------------
+  # Gibt die letzte gespeicherte Temperaturmessung zurück
+  # ----------------------------------------------------------
+  /latest:
+    get:
+      tags:
+        - Temperature
+      summary: Aktuellste Temperatur
+      description: Gibt die aktuellste Temperaturmessung zurück
+      operationId: getLatestTemperature
+      responses:
+        '200':
+          description: Aktuelle Temperatur gefunden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemperatureResponse'
+              example:
+                device_id: esp8266_ECFABC5F0
+                temperature: 25.75
+                unit: celsius
+                timestamp: "2026-05-07T10:30:00+02:00"
+        '404':
+          description: Keine Daten gefunden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: No data found
+        '500':
+          description: Datenbankfehler
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------------
+  # TEMPERATURSTATISTIKEN
+  # ----------------------------------------------------------
+  # Berechnet statistische Kennzahlen für einen Zeitraum
+  # ----------------------------------------------------------
+  /stats:
+    get:
+      tags:
+        - Statistics
+      summary: Temperaturstatistiken
+      description: Liefert statistische Kennzahlen für einen Zeitraum
+      operationId: getTemperatureStats
+      parameters:
+        - name: hours
+          in: query
+          description: "Zeitraum in Stunden (Standard: 24)"
+          schema:
+            type: integer
+            default: 24
+            minimum: 1
+            maximum: 720
+          example: 24
+      responses:
+        '200':
+          description: Statistiken erfolgreich berechnet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatsResponse'
+              example:
+                min_temp: 24.5
+                max_temp: 26.8
+                avg_temp: 25.49
+                count: 5483
+        '500':
+          description: Datenbankfehler
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------------
+  # TEMPERATURVERLAUF (ZEITREIHE)
+  # ----------------------------------------------------------
+  # Liefert Temperaturdaten als Zeitreihe für Diagramme
+  # ----------------------------------------------------------
+  /history:
+    get:
+      tags:
+        - History
+      summary: Temperaturverlauf
+      description: Gibt den Temperaturverlauf als Zeitreihe zurück (für Diagramme)
+      operationId: getTemperatureHistory
+      parameters:
+        - name: hours
+          in: query
+          description: "Zeitraum in Stunden (Standard: 24)"
+          schema:
+            type: integer
+            default: 24
+            minimum: 1
+            maximum: 720
+          example: 24
+        - name: limit
+          in: query
+          description: "Maximale Anzahl Messungen (Standard: 200)"
+          schema:
+            type: integer
+            default: 200
+            minimum: 1
+            maximum: 10000
+          example: 500
+      responses:
+        '200':
+          description: Zeitreihen-Daten erfolgreich geladen
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TemperatureResponse'
+              example:
+                - device_id: esp8266_ECFABC5F0
+                  temperature: 25.5
+                  unit: celsius
+                  timestamp: "2026-05-07T10:00:00+02:00"
+                - device_id: esp8266_ECFABC5F0
+                  temperature: 25.7
+                  unit: celsius
+                  timestamp: "2026-05-07T10:05:00+02:00"
+        '500':
+          description: Datenbankfehler
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------------
+  # ALLE GERÄTESTATUS
+  # ----------------------------------------------------------
+  # Liste aller Geräte mit Online/Offline-Status
+  # ----------------------------------------------------------
+  /devices/status:
+    get:
+      tags:
+        - Devices
+      summary: Alle Gerätestatus
+      description: Gibt den Status aller registrierten Geräte zurück (online/offline basierend auf LWT)
+      operationId: getAllDeviceStatus
+      responses:
+        '200':
+          description: Gerätestatus erfolgreich geladen
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DeviceStatus'
+              example:
+                - device_id: esp8266_ECFABC5F0
+                  status: online
+                  last_seen: "2026-05-07T10:30:00+02:00"
+                  last_rssi: -55
+                  last_free_heap: 15000
+        '500':
+          description: Datenbankfehler
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------------
+  # EINZELNER GERÄTESTATUS
+  # ----------------------------------------------------------
+  # Status eines bestimmten Geräts abrufen
+  # ----------------------------------------------------------
+  /devices/{device_id}/status:
+    get:
+      tags:
+        - Devices
+      summary: Einzelner Gerätestatus
+      description: Gibt den Status eines bestimmten Geräts zurück
+      operationId: getDeviceStatus
+      parameters:
+        - name: device_id
+          in: path
+          description: Eindeutige Geräte-ID
+          required: true
+          schema:
+            type: string
+            pattern: ^esp8266_[A-F0-9]{12}$
+          example: esp8266_ECFABC5F0
+      responses:
+        '200':
+          description: Gerätestatus gefunden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeviceStatus'
+              example:
+                device_id: esp8266_ECFABC5F0
+                status: online
+                last_seen: "2026-05-07T10:30:00+02:00"
+                last_rssi: -55
+                last_free_heap: 15000
+                uptime_seconds: 3600
+        '404':
+          description: Gerät nicht gefunden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Device not found
+        '500':
+          description: Datenbankfehler
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------------
+  # LWT STATISTIKEN
+  # ----------------------------------------------------------
+  # Last Will Testament - Übersicht über Geräte-Online/Offline
+  # ----------------------------------------------------------
+  /lwt/stats:
+    get:
+      tags:
+        - LWT
+      summary: LWT Statistiken
+      description: Liefert Statistiken über Geräte-Online/Offline-Status (Last Will Testament)
+      operationId: getLWTStats
+      responses:
+        '200':
+          description: LWT Statistiken erfolgreich geladen
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LWTStats'
+              example:
+                total_devices: 3
+                online_devices: 2
+                offline_devices: 1
+                avg_rssi: -62.5
+                lwt_timeout_seconds: 120
+        '500':
+          description: Datenbankfehler
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------------
+  # FIRMWARE VERSION
+  # ----------------------------------------------------------
+  # Aktuelle Firmware-Informationen abrufen
+  # ----------------------------------------------------------
+  /firmware/version:
+    get:
+      tags:
+        - Firmware
+      summary: Firmware Version
+      description: Gibt die aktuelle Firmware-Version und -Informationen zurück
+      operationId: getFirmwareVersion
+      responses:
+        '200':
+          description: Firmware-Info erfolgreich geladen
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FirmwareInfo'
+              example:
+                version: 1.0.1
+                md5: a1b2c3d4e5f6g7h8i9j0
+                size: 524288
+        '500':
+          description: Serverfehler
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------------
+  # FIRMWARE HOCHLADEN (OTA)
+  # ----------------------------------------------------------
+  # Neue Firmware-Datei für Over-the-Air Updates hochladen
+  # ----------------------------------------------------------
+  /firmware/upload:
+    post:
+      tags:
+        - Firmware
+      summary: Firmware hochladen (OTA)
+      description: Lädt eine neue Firmware-Datei für Over-the-Air Updates hoch
+      operationId: uploadFirmware
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Firmware-Datei (.bin)
+                version:
+                  type: string
+                  description: Versionsnummer der Firmware
+                  example: 1.0.1
+              required:
+                - file
+      responses:
+        '200':
+          description: Firmware erfolgreich hochgeladen
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FirmwareUploadResponse'
+              example:
+                status: success
+                message: Firmware uploaded successfully
+                version: 1.0.1
+                md5: a1b2c3d4e5f6g7h8i9j0
+        '400':
+          description: Ungültige Anfrage (falsche Datei oder Format)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: Only .bin files allowed
+        '500':
+          description: Serverfehler
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ----------------------------------------------------------
+  # FIRMWARE LÖSCHEN
+  # ----------------------------------------------------------
+  # Aktuelle Firmware-Datei vom Server entfernen
+  # ----------------------------------------------------------
+  /firmware/delete:
+    delete:
+      tags:
+        - Firmware
+      summary: Firmware löschen
+      description: Löscht die aktuell gespeicherte Firmware-Datei
+      operationId: deleteFirmware
+      responses:
+        '200':
+          description: Firmware erfolgreich gelöscht
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: success
+                  message:
+                    type: string
+                    example: Firmware deleted
+        '500':
+          description: Serverfehler
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+# ============================================================
+# KOMPONENTEN (SCHEMAS & SECURITY)
+# ============================================================
+
+components:
+  schemas:
+    # ----------------------------------------------------------
+    # FEHLERANTWORT
+    # ----------------------------------------------------------
+    # Standardisiertes Fehlerformat für alle Endpunkte
+    # ----------------------------------------------------------
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+          description: Fehlermeldung
+          example: Database connection failed
+      required:
+        - error
+
+    # ----------------------------------------------------------
+    # HEALTH-RESPONSE
+    # ----------------------------------------------------------
+    # Antwort für den Health-Check-Endpunkt
+    # ----------------------------------------------------------
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, unhealthy]
+          example: healthy
+        database:
+          type: string
+          enum: [connected, disconnected]
+          example: connected
+        timezone:
+          type: string
+          example: Europe/Berlin
+        server_time:
+          type: string
+          format: date-time
+          example: "2026-05-07T10:30:00+02:00"
+      required:
+        - status
+        - database
+
+    # ----------------------------------------------------------
+    # TEMPERATUR-RESPONSE
+    # ----------------------------------------------------------
+    # Einzelne Temperaturmessung mit Metadaten
+    # ----------------------------------------------------------
+    TemperatureResponse:
+      type: object
+      properties:
+        device_id:
+          type: string
+          description: Eindeutige Geräte-ID
+          example: esp8266_ECFABC5F0
+        temperature:
+          type: number
+          format: float
+          description: Temperaturwert
+          example: 25.75
+        unit:
+          type: string
+          enum: [celsius, fahrenheit]
+          description: Einheit
+          example: celsius
+        timestamp:
+          type: string
+          format: date-time
+          description: Zeitstempel der Messung (Europe/Berlin)
+          example: "2026-05-07T10:30:00+02:00"
+      required:
+        - device_id
+        - temperature
+        - unit
+        - timestamp
+
+    # ----------------------------------------------------------
+    # STATISTIK-RESPONSE
+    # ----------------------------------------------------------
+    # Statistische Kennzahlen für Temperaturdaten
+    # ----------------------------------------------------------
+    StatsResponse:
+      type: object
+      properties:
+        min_temp:
+          type: number
+          format: float
+          description: Minimale Temperatur
+          example: 24.5
+          nullable: true
+        max_temp:
+          type: number
+          format: float
+          description: Maximale Temperatur
+          example: 26.8
+          nullable: true
+        avg_temp:
+          type: number
+          format: float
+          description: Durchschnittliche Temperatur
+          example: 25.49
+          nullable: true
+        count:
+          type: integer
+          description: Anzahl der Messungen
+          example: 5483
+      required:
+        - count
+
+    # ----------------------------------------------------------
+    # GERÄTESTATUS
+    # ----------------------------------------------------------
+    # Statusinformationen eines IoT-Geräts
+    # ----------------------------------------------------------
+    DeviceStatus:
+      type: object
+      properties:
+        device_id:
+          type: string
+          description: Eindeutige Geräte-ID
+          example: esp8266_ECFABC5F0
+        status:
+          type: string
+          enum: [online, offline]
+          description: Aktueller Online-Status
+          example: online
+        last_seen:
+          type: string
+          format: date-time
+          description: Letzte Nachricht empfangen
+          example: "2026-05-07T10:30:00+02:00"
+          nullable: true
+        last_rssi:
+          type: integer
+          description: Letzte Signalstärke in dBm
+          example: -55
+          nullable: true
+        last_free_heap:
+          type: integer
+          description: Letzter freier RAM in Bytes
+          example: 15000
+          nullable: true
+        uptime_seconds:
+          type: integer
+          description: Betriebszeit in Sekunden (nur bei online)
+          example: 3600
+          nullable: true
+      required:
+        - device_id
+        - status
+
+    # ----------------------------------------------------------
+    # LWT STATISTIKEN
+    # ----------------------------------------------------------
+    # Last Will Testament - Übersicht über Geräte-Status
+    # ----------------------------------------------------------
+    LWTStats:
+      type: object
+      properties:
+        total_devices:
+          type: integer
+          description: Gesamtanzahl registrierter Geräte
+          example: 3
+        online_devices:
+          type: integer
+          description: Anzahl online Geräte
+          example: 2
+        offline_devices:
+          type: integer
+          description: Anzahl offline Geräte
+          example: 1
+        avg_rssi:
+          type: number
+          format: float
+          description: Durchschnittliche Signalstärke aller Geräte
+          example: -62.5
+          nullable: true
+        lwt_timeout_seconds:
+          type: integer
+          description: LWT Timeout in Sekunden (konfiguriert im ESP8266)
+          example: 120
+      required:
+        - total_devices
+        - online_devices
+        - offline_devices
+        - lwt_timeout_seconds
+
+    # ----------------------------------------------------------
+    # FIRMWARE INFORMATIONEN
+    # ----------------------------------------------------------
+    # Metadaten der aktuellen Firmware-Datei
+    # ----------------------------------------------------------
+    FirmwareInfo:
+      type: object
+      properties:
+        version:
+          type: string
+          description: Firmware-Version
+          example: 1.0.1
+        md5:
+          type: string
+          description: MD5-Hash der Firmware-Datei
+          example: a1b2c3d4e5f6g7h8i9j0
+          nullable: true
+        size:
+          type: integer
+          description: Größe der Firmware-Datei in Bytes
+          example: 524288
+      required:
+        - version
+        - size
+
+    # ----------------------------------------------------------
+    # FIRMWARE UPLOAD ANTWORT
+    # ----------------------------------------------------------
+    # Antwort nach erfolgreichem Firmware-Upload
+    # ----------------------------------------------------------
+    FirmwareUploadResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [success, error]
+          example: success
+        message:
+          type: string
+          description: Statusmeldung
+          example: Firmware uploaded successfully
+        version:
+          type: string
+          description: Hochgeladene Version
+          example: 1.0.1
+        md5:
+          type: string
+          description: MD5-Hash der hochgeladenen Datei
+          example: a1b2c3d4e5f6g7h8i9j0
+      required:
+        - status
+        - message
+
+  # ----------------------------------------------------------
+  # SECURITY SCHEMES
+  # ----------------------------------------------------------
+  # Authentifizierungsmethode (optional)
+  # ----------------------------------------------------------
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API-Key für authentifizierte Anfragen (optional)
+
+# ============================================================
+# GLOBALE SECURITY
+# ============================================================
+# Standardmäßig für alle Endpunkte anwenden
+# ============================================================
+security:
+  - ApiKeyAuth: []
+
+# ============================================================
+# EXTERNE DOKUMENTATION
+# ============================================================
+# Verweis auf das GitHub-Repository
+# ============================================================
+externalDocs:
+  description: Weitere Informationen zum IoT Temperature Monitoring System
+  url: https://github.com/your-username/iot-temperature-system

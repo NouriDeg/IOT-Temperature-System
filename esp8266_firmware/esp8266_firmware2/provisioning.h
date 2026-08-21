@@ -61,7 +61,7 @@ private:
     struct Credentials {
         bool isProvisioned = false;          // Flag: true = bereits provisioniert
         char device_id[32] = {0};            // Eindeutige Geräte-ID (aus MAC generiert)
-        char mqtt_broker[64] = {0};          // MQTT Broker IP (z.B. "192.168.0.105")
+        char mqtt_broker[64] = {0};          // MQTT Broker IP (z.B. "192.168.0.106")
         uint16_t mqtt_port = 8883;           // MQTT Port (8883 = TLS, 1883 = ohne TLS)
         char mqtt_user[32] = {0};            // MQTT Benutzername (vom Service generiert)
         char mqtt_password[64] = {0};        // MQTT Passwort (vom Service generiert)
@@ -145,7 +145,7 @@ public:
     /**
      * Initialisiert den Provisioning Client
      * 
-     * @param host IP/Hostname des Provisioning Service (z.B. "192.168.0.105")
+     * @param host IP/Hostname des Provisioning Service (z.B. "192.168.0.106")
      * @param port Port des Provisioning Service (meist 1883)
      */
     ProvisioningClient(const char* host, int port) 
@@ -281,7 +281,7 @@ public:
         // 6. CREDENTIALS IN STRUKTUR SPEICHERN
         // =====================================================================
         strlcpy(creds.device_id, device_id.c_str(), sizeof(creds.device_id));
-        strlcpy(creds.mqtt_broker, doc["mqtt_broker"] | "192.168.0.105", sizeof(creds.mqtt_broker));
+        strlcpy(creds.mqtt_broker, doc["mqtt_broker"] | "192.168.0.106", sizeof(creds.mqtt_broker));
         creds.mqtt_port = doc["mqtt_port"] | 8883;
         strlcpy(creds.mqtt_user, doc["mqtt_username"] | "", sizeof(creds.mqtt_user));
         strlcpy(creds.mqtt_password, doc["mqtt_password"] | "", sizeof(creds.mqtt_password));

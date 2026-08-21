@@ -1,0 +1,22 @@
+# k8s/frontend-fixed.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: iot-temperature
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: iot-frontend:latest
+        imagePullPolicy: Never
+        ports:
+        - containerPort: 80

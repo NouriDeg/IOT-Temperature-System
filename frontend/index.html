@@ -1,117 +1,365 @@
-﻿<!DOCTYPE html>
+﻿<!-- ============================================
+     IoT DASHBOARD - HTML STRUKTUR
+     ============================================
+     
+     Version: 6.0
+     Datum: 16.08.2026
+     
+     STRUKTUR:
+     - Header mit Titel und Zeitzone
+     - Zeile 1: 3 Karten (Temperaturen, Statistik, LWT)
+     - Zeile 2: 2 Karten (Geräteliste, OTA)
+     - Zeile 3: Vollbreite Karte (Diagramm)
+     
+     KOMPONENTEN:
+     - Aktuelle Temperaturen aller Geräte (dynamisch per JS)
+     - Statistik: Min, Max, Durchschnitt, Messungen
+     - LWT Status: Online/Offline Übersicht
+     - Geräte Status: Detaillierte Liste mit RSSI, Heap
+     - OTA Firmware Management: Upload + Update
+     - Temperaturverlauf: Chart.js Diagramm
+     ============================================ -->
+
+<!-- 
+   DOCTYPE: HTML5 Dokumenttyp
+   Stellt sicher, dass der Browser den HTML5-Standard verwendet
+-->
+<!DOCTYPE html>
+
+<!-- 
+   html: Wurzelelement der Seite
+   lang="de": Sprache auf Deutsch gesetzt (für Screenreader und Übersetzung)
+-->
 <html lang="de">
+
+<!-- ============================================
+     HEAD: Metadaten, Titel, externe Ressourcen
+     ============================================ -->
 <head>
+    <!-- 
+       meta charset="UTF-8": Zeichenkodierung
+       Unterstützt alle deutschen Sonderzeichen (ä, ö, ü, ß)
+    -->
     <meta charset="UTF-8">
+    
+    <!-- 
+       meta viewport: Responsive Design für mobile Geräte
+       width=device-width: Breite = Bildschirmbreite
+       initial-scale=1.0: Standard-Zoom-Level
+    -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- 
+       title: Titel im Browser-Tab
+       Wird auch von Suchmaschinen und Lesezeichen verwendet
+    -->
     <title>IoT Dashboard</title>
+    
+    <!-- 
+       link rel="stylesheet": Einbindung der CSS-Datei
+       href="css/style.css": Pfad zum Stylesheet (relativ zur HTML-Datei)
+    -->
     <link rel="stylesheet" href="css/style.css">
+    
+    <!-- 
+       script src: Einbindung von Chart.js (für das Diagramm)
+       Externe Bibliothek von CDN (Content Delivery Network)
+       - Ermöglicht die Erstellung von Liniendiagrammen
+       - Wird asynchron geladen, blockiert nicht das Rendering
+    -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
+
+<!-- ============================================
+     BODY: Sichtbarer Inhalt der Seite
+     ============================================ -->
 <body>
-    <!-- ============================================
-         IoT TEMPERATURE MONITORING SYSTEM - DASHBOARD
-         ============================================
-         Design: 
-         - Weiße Schrift für alle Texte
-         - Rote Temperaturanzeige für aktuellen Wert
-         - Gelbe, größere Schrift für "Letzte Messung"
-         - Responsive 3-spaltiges Grid Layout
-         
-         Version: 2.0
-         Datum: 29.04.2026
-    ============================================ -->
-    
+    <!-- 
+       container: Hauptcontainer für die gesamte Seite
+       - max-width: 1400px (zentriert)
+       - Enthält alle Inhalte
+    -->
     <div class="container">
-        <!-- Haupttitel der Anwendung -->
+        
+        <!-- ==========================================
+             HEADER: Titel und Zeitzonen-Info
+             ========================================== -->
+        
+        <!-- 
+           h1: Haupttitel der Anwendung
+           - 🌡️ Emoji als visuelles Icon
+           - Wird in der Mitte angezeigt (text-align: center)
+        -->
         <h1>🌡️ IoT Temperature Monitoring System</h1>
         
-        <!-- Zeitzoneninformation (klein, hellgrau) -->
-        <p class="timestamp">Zeitzone: Europe/Berlin (CET/CEST)</p>
+        <!-- 
+           p class="timestamp": Zusatzinformationen unter dem Titel
+           - Zeitzone: Europe/Berlin (CET/CEST)
+           - Live-Update alle 10 Sekunden (Hinweis für Benutzer)
+           - Kleine, hellgraue Schrift (.timestamp in CSS)
+        -->
+        <p class="timestamp">Zeitzone: Europe/Berlin (CET/CEST) | Live-Update alle 10 Sekunden</p>
+
+        <!-- ==========================================
+             ZEILE 1: 3 KARTEN (Temperaturen, Statistik, LWT)
+             ========================================== -->
         
-        <!-- ============================================
-             ERSTE ZEILE: 3 KARTEN (Hauptinformationen)
-             ============================================ -->
+        <!-- 
+           grid: CSS-Grid Container für die erste Zeile
+           - 3 Spalten (Standard)
+           - gap: 20px zwischen den Karten
+        -->
         <div class="grid">
             
-            <!-- Karte 1: Aktuelle Temperatur (Rote Schrift!) -->
-            <div class="card">
-                <h3>🌡️ Aktuelle Temperatur</h3>
-                <!-- Temperaturwert - ROT und GROSS -->
-                <div class="temp-big" id="current-temp">--.- °C</div>
-                <!-- Geräte-ID (klein, weiß) -->
-                <div id="current-device" class="device-id"></div>
-                <!-- Letzte Messung - GELB und GRÖSSER (Spezialstil) -->
-                <div id="current-time" class="last-message"></div>
-            </div>
+            <!-- ==========================================
+                 KARTE 1: AKTUELLE TEMPERATUREN (ALLE GERÄTE)
+                 ========================================== -->
             
-            <!-- Karte 2: Statistik der letzten 24 Stunden -->
+            <!-- 
+               card: Karten-Container
+               - Hintergrund: Transparent mit Glas-Effekt
+               - Abgerundete Ecken, Schatten bei Hover
+            -->
             <div class="card">
+                
+                <!-- 
+                   h3: Karten-Überschrift
+                   - 🌡️ Emoji für Temperatur
+                   - Roter linker Rand als Akzent (border-left: 3px solid #ff4444)
+                -->
+                <h3>🌡️ Aktuelle Temperaturen</h3>
+                
+                <!-- 
+                   div id="current-temps-container": Container für die Temperatur-Liste
+                   - Wird per JavaScript dynamisch befüllt
+                   - Zeigt alle Geräte mit Temperatur, Status, letzter Messung
+                   - Bei leerem Inhalt wird "Lade Temperaturen..." angezeigt
+                -->
+                <div id="current-temps-container">
+                    <!-- 
+                       loading: Platzhalter während des Ladens
+                       - Wird durch JavaScript ersetzt, sobald Daten geladen sind
+                       - Klasse .loading: hellgrau, kursiv, zentriert
+                    -->
+                    <div class="loading">Lade Temperaturen...</div>
+                </div>
+            </div>
+
+            <!-- ==========================================
+                 KARTE 2: STATISTIK (letzte 24h)
+                 ========================================== -->
+            
+            <div class="card">
+                
+                <!-- 
+                   h3: Karten-Überschrift
+                   - 📊 Emoji für Statistik
+                -->
                 <h3>📊 Statistik (letzte 24h)</h3>
+                
+                <!-- 
+                   stat-item: Einzelner Statistik-Eintrag
+                   - 📉 Min: Minimum-Temperatur (wird per JS aktualisiert)
+                   - span id="min-temp": Platzhalter für den Wert
+                   - Wird von fetchStats() mit Daten gefüllt
+                -->
                 <div class="stat-item">📉 Min: <span id="min-temp">--</span> °C</div>
                 <div class="stat-item">📈 Max: <span id="max-temp">--</span> °C</div>
                 <div class="stat-item">📊 Durchschnitt: <span id="avg-temp">--</span> °C</div>
                 <div class="stat-item">🔢 Messungen: <span id="count">--</span></div>
             </div>
+
+            <!-- ==========================================
+                 KARTE 3: LWT STATUS (Last Will Testament)
+                 ========================================== -->
             
-            <!-- Karte 3: LWT (Last Will Testament) Status -->
             <div class="card">
+                
+                <!-- 
+                   h3: Karten-Überschrift
+                   - 💓 Emoji für Herz (LWT = Lebenszeichen)
+                -->
                 <h3>💓 LWT Status</h3>
+                
+                <!-- 
+                   lwt-item: Einzelner LWT-Eintrag
+                   - 📱 Gesamt Geräte: Anzahl aller registrierten Geräte
+                   - 🟢 Online: Anzahl der aktiven Geräte (letzte 2 Minuten)
+                   - 🔴 Offline: Anzahl der inaktiven Geräte
+                   - 📶 Ø RSSI: Durchschnittliche Signalstärke
+                -->
                 <div class="lwt-item">📱 Gesamt Geräte: <span id="total-devices">--</span></div>
                 <div class="lwt-item">🟢 Online: <span id="online-devices">--</span></div>
                 <div class="lwt-item">🔴 Offline: <span id="offline-devices">--</span></div>
                 <div class="lwt-item">📶 Ø RSSI: <span id="avg-rssi">--</span> dBm</div>
+                
+                <!-- 
+                   lwt-timeout: LWT Timeout Anzeige
+                   - Gelbe Schrift (#FFC107) als Warnfarbe
+                   - 120 Sekunden = konfigurierter Timeout im ESP8266
+                   - Mit oberer Trennlinie (border-top)
+                -->
                 <div class="lwt-timeout">⏱️ LWT Timeout: 120 Sekunden</div>
             </div>
         </div>
+
+        <!-- ==========================================
+             ZEILE 2: 2 KARTEN (Geräteliste + OTA)
+             ========================================== -->
         
-        <!-- ============================================
-             ZWEITE ZEILE: GERÄTELISTE & OTA MANAGEMENT
-             ============================================ -->
         <div class="grid">
             
-            <!-- Karte 4: Detaillierte Geräteliste mit Status -->
+            <!-- ==========================================
+                 KARTE 4: GERÄTE STATUS (DETAILLISTE)
+                 ========================================== -->
+            
             <div class="card">
+                
+                <!-- 
+                   h3: Karten-Überschrift
+                   - 📱 Emoji für Geräte
+                -->
                 <h3>📱 Geräte Status</h3>
+                
+                <!-- 
+                   div class="device-list": Container für die Geräteliste
+                   - max-height: 350px (scrollbar bei vielen Geräten)
+                   - overflow-y: auto (vertikaler Scrollbalken)
+                   - Wird per JavaScript mit Daten gefüllt
+                -->
                 <div class="device-list" id="devices-list">
+                    <!-- 
+                       loading: Platzhalter während des Ladens
+                       - Wird durch JavaScript ersetzt
+                    -->
                     <div class="loading">Wird geladen...</div>
                 </div>
             </div>
+
+            <!-- ==========================================
+                 KARTE 5: OTA FIRMWARE MANAGEMENT
+                 ========================================== -->
             
-            <!-- Karte 5: OTA (Over-the-Air) Firmware Management -->
             <div class="card">
+                
+                <!-- 
+                   h3: Karten-Überschrift
+                   - 🔧 Emoji für Werkzeug (OTA = Over-the-Air)
+                -->
                 <h3>🔧 OTA Firmware Management</h3>
                 
-                <!-- Firmware Info Anzeige -->
+                <!-- 
+                   div id="firmware-info": Anzeige der aktuellen Firmware
+                   - Version, Größe, MD5-Hash
+                   - Wird per JavaScript gefüllt (fetchFirmwareInfo())
+                -->
                 <div id="firmware-info" class="firmware-info">
                     <div class="loading">Wird geladen...</div>
                 </div>
                 
-                <!-- Firmware Upload Formular -->
+                <!-- 
+                   upload-form: Formular für Firmware-Upload
+                   - display: flex, flex-direction: column (untereinander)
+                   - gap: 8px zwischen den Elementen
+                -->
                 <div class="upload-form">
+                    
+                    <!-- 
+                       upload-label: Label für File-Input
+                       - 📁 Emoji für Datei
+                    -->
                     <label class="upload-label">📁 Firmware Datei:</label>
+                    
+                    <!-- 
+                       input type="file": Dateiauswahl
+                       - id="firmware-file": Referenz für JavaScript
+                       - accept=".bin": Nur .bin Dateien erlaubt
+                       - class="file-input": Styling für das Input-Feld
+                    -->
                     <input type="file" id="firmware-file" accept=".bin" class="file-input">
                     
+                    <!-- 
+                       upload-label: Label für Version
+                       - 📌 Emoji für Version
+                    -->
                     <label class="upload-label">📌 Version:</label>
+                    
+                    <!-- 
+                       input type="text": Versionsnummer
+                       - id="firmware-version": Referenz für JavaScript
+                       - placeholder="z.B. 1.0.1": Beispielwert
+                       - class="version-input": Styling
+                    -->
                     <input type="text" id="firmware-version" placeholder="z.B. 1.0.1" class="version-input">
                     
+                    <!-- 
+                       button: Firmware hochladen
+                       - onclick="uploadFirmware()": JavaScript-Funktion
+                       - class="upload-btn": Roter Button
+                       - 📤 Emoji für Upload
+                    -->
                     <button onclick="uploadFirmware()" class="upload-btn">📤 Firmware hochladen</button>
+                    
+                    <!-- 
+                       button: OTA Update auslösen
+                       - onclick="triggerOTA()": JavaScript-Funktion
+                       - class="ota-btn": Grüner Button
+                       - 🚀 Emoji für Rakete (Update)
+                    -->
                     <button onclick="triggerOTA()" class="ota-btn">🚀 OTA Update auslösen</button>
                     
+                    <!-- 
+                       div id="upload-status": Statusmeldungen
+                       - Erfolg/Fehler/Info beim Upload
+                       - Wird von showStatus() gefüllt
+                    -->
                     <div id="upload-status" class="upload-status"></div>
                 </div>
             </div>
         </div>
+
+        <!-- ==========================================
+             ZEILE 3: TEMPERATURVERLAUF (DIAGRAMM)
+             ========================================== -->
         
-        <!-- ============================================
-             DRITTE ZEILE: TEMPERATURVERLAUF DIAGRAMM
-             ============================================ -->
+        <!-- 
+           card full-width: Vollbreite Karte
+           - nimmt alle 3 Spalten ein (grid-column: span 3)
+           - Für das große Diagramm
+        -->
         <div class="card full-width">
+            
+            <!-- 
+               h3: Karten-Überschrift
+               - 📈 Emoji für Diagramm
+            -->
             <h3>📈 Temperaturverlauf (letzte 24h)</h3>
+            
+            <!-- 
+               canvas: Zeichenfläche für Chart.js
+               - id="tempChart": Referenz für JavaScript
+               - Wird von fetchHistory() mit Daten gefüllt
+               - Chart.js rendert hier das Liniendiagramm
+            -->
             <canvas id="tempChart"></canvas>
         </div>
-    </div>
+        
+    </div> <!-- Ende .container -->
 
-    <!-- JavaScript für Dashboard-Logik -->
+    <!-- ==========================================
+         JAVASCRIPT (am Ende für bessere Ladezeit)
+         ========================================== -->
+    
+    <!-- 
+       script src: Einbindung der dashboard.js
+       - Enthält die gesamte Logik:
+         * API-Aufrufe (fetchCurrentTemperatures, fetchStats, etc.)
+         * Chart.js Initialisierung
+         * OTA Upload
+         * Live-Update (alle 10 Sekunden)
+       - Wird am Ende geladen, damit das DOM bereits vorhanden ist
+    -->
     <script src="js/dashboard.js"></script>
+    
 </body>
 </html>

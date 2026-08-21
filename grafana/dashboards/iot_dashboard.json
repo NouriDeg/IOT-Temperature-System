@@ -1,0 +1,114 @@
+{
+  "title": "IoT Temperature Dashboard",
+  "uid": "iot-temp-001",
+  "version": 1,
+  "timezone": "browser",
+  "panels": [
+    {
+      "id": 1,
+      "title": "🌡️ Aktuelle Temperaturen",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT device_id, value FROM sensor_data WHERE (device_id, received_at) IN (SELECT device_id, MAX(received_at) FROM sensor_data GROUP BY device_id) ORDER BY value DESC",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "orange", "value": 30},
+              {"color": "red", "value": 35}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "📈 Temperaturverlauf",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 4},
+      "targets": [
+        {
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT received_at AS \"time\", value AS \"Temperatur (°C)\" FROM sensor_data WHERE $__timeFilter(received_at) AND device_id = '$device' ORDER BY received_at",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "celsius",
+          "color": {"mode": "palette-classic"},
+          "custom": {"lineInterpolation": "smooth"}
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "📊 Geräte-Statistik",
+      "type": "table",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 12},
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT device_id AS \"Gerät\", COUNT(*) AS \"Messungen\", ROUND(AVG(value)::numeric, 2) AS \"Ø Temperatur (°C)\", ROUND(MIN(value)::numeric, 2) AS \"Min (°C)\", ROUND(MAX(value)::numeric, 2) AS \"Max (°C)\", MAX(received_at) AS \"Letzte Messung\" FROM sensor_data WHERE $__timeFilter(received_at) GROUP BY device_id ORDER BY \"Ø Temperatur (°C)\" DESC",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "⚠️ Temperatur-Alarme (>35°C)",
+      "type": "table",
+      "gridPos": {"h": 6, "w": 12, "x": 0, "y": 18},
+      "targets": [
+        {
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT received_at AS \"Zeit\", device_id AS \"Gerät\", value AS \"Temperatur (°C)\" FROM sensor_data WHERE value > 35 AND $__timeFilter(received_at) ORDER BY received_at DESC LIMIT 50",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": {"mode": "thresholds"},
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "orange", "value": null},
+              {"color": "red", "value": 35}
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "device",
+        "type": "query",
+        "query": "SELECT DISTINCT device_id FROM sensor_data ORDER BY device_id",
+        "includeAll": true,
+        "multi": false,
+        "refresh": 2
+      }
+    ]
+  },
+  "time": {
+    "from": "now-24h",
+    "to": "now"
+  },
+  "refresh": "30s"
+}

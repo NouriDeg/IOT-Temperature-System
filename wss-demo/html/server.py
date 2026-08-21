@@ -13,7 +13,7 @@ Warum wird das benötigt?
 
 Verwendung:
 1. Server starten: python server.py
-2. Browser öffnen: https://192.168.0.105:4443/wss-all-browser.html
+2. Browser öffnen: https://192.168.0.106:4443/wss-all-browser.html
 3. WSS Verbindung testen
  
 IoT Temperature Monitoring System
@@ -132,7 +132,7 @@ def main():
     # =========================================================================
     # 4. SERVER INFO AUSGEBEN
     # =========================================================================
-    print(f"✅ HTTPS Server läuft auf https://192.168.0.105:{PORT}")
+    print(f"✅ HTTPS Server läuft auf https://192.168.0.106:{PORT}")
     print(f"📁 Serving: {WEB_DIR}")
     print("Press Ctrl+C to stop")
     

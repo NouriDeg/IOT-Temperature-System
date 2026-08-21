@@ -92,7 +92,7 @@ IPAddress dns(192, 168, 0, 1);         // DNS Server (meist Router)
 // Der Provisioning Service vergibt automatisch MQTT Credentials
 // ============================================
 
-const char* PROVISIONING_HOST = "192.168.0.105";  // IP deines Windows Rechners (Docker Host)
+const char* PROVISIONING_HOST = "192.168.0.106";  // IP deines Windows Rechners (Docker Host)
 const int PROVISIONING_PORT = 1883;               // MQTT Port (ohne TLS, nur für Provisioning)
 
 // ============================================

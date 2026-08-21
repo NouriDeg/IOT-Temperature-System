@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<!-- ============================================================
+     IOT WSS DASHBOARD - WebSocket Client
+     ============================================================
+     
+     BESCHREIBUNG:
+     Dieses Dashboard verbindet sich über WebSocket (WS/WSS)
+     mit einem MQTT Broker und zeigt live Temperaturdaten von
+     ESP8266 Sensoren an.
+     
+     TECHNOLOGIEN:
+     - MQTT.js (WebSocket Client Bibliothek)
+     - Native JavaScript (ES6)
+     - Responsive CSS Grid
+     - Dark Mode Design
+     
+     SICHERHEITSMERKMALE:
+     - Keine Passwörter im Code gespeichert
+     - Passwort-Toggle (Show/Hide) für bessere Benutzerfreundlichkeit
+     - HTML-Escaping gegen XSS (Cross-Site Scripting)
+     - Unterstützt selbstsignierte Zertifikate
+     
+     AUTOR:   Nouri Deg
+     PROJEKT: IoT Temperature Monitoring System
+     DATUM:   17.08.2026
+     VERSION: 7.0 - MQTT.js Fix
+     ============================================================ -->
+
+<!-- Sprachattribut: Deutsch für Screenreader und Suchmaschinen -->
+<html lang="de">
+<head>
+    <!-- ============================================
+         META-INFO & RESSOURCEN
+         ============================================ -->
+    
+    <!-- 
+      meta charset: Zeichensatz-Kodierung
+      Unterstützt deutsche Umlaute (ä, ö, ü) und Sonderzeichen
+    -->
+    <meta charset="UTF-8">
+    
+    <!-- 
+      meta viewport: Responsive Design für mobile Geräte
+      width=device-width: Breite = Bildschirmbreite
+      initial-scale=1.0: Standard-Zoom-Level
+    -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    
+    <!-- 
+      title: Dokumententitel
+      Wird im Browser-Tab und in Lesezeichen angezeigt
+    -->
+    <title>IoT WSS Dashboard</title>
+    
+    <!-- ============================================
+         EXTERNE BIBLIOTHEK: MQTT.js
+         ============================================ -->
+    
+    <!-- 
+      MQTT.js Bibliothek für WebSocket MQTT Verbindungen
+      - Lädt die Bibliothek von einem CDN (Content Delivery Network)
+      - Bietet mqtt.connect() Funktion für WebSocket Verbindungen
+      - Unterstützt sowohl ws:// (unverschlüsselt) als auch wss:// (TLS)
+      - Version 4.3.7 ist stabil und gut getestet
+    -->
+    <script src="https://unpkg.com/mqtt@4.3.7/dist/mqtt.min.js"></script>
+    
+    <!-- ============================================
+         CSS STYLES - DARK MODE DESIGN
+         ============================================ -->
+    <style>
+        /* ============================================
+           GLOBALE STYLES - Dark Mode für bessere Lesbarkeit
+           ============================================ */
+        
+        /* 
+          *-Selektor: Entfernt Standard-Browser-Abstände 
+          box-sizing: border-box = Padding/Border werden in die Breite einbezogen
+          Dadurch wird das Layout konsistenter
+        */
+        * {
+            box-sizing: border-box;
+        }
+        
+        /* 
+          body: Hauptseite 
+          - Hintergrund: Dunkler Farbverlauf von dunkelblau zu dunkelgrau
+          - Schrift: System-Schriftart für bessere Performance
+          - Farbe: Helles Grau für Text (bessere Lesbarkeit)
+          - margin: 0 = keine Abstände zum Rand
+          - padding: 20px = Innenabstand für bessere Lesbarkeit
+          - min-height: 100vh = gesamte Bildschirmhöhe
+        */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #e8edf5;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+        
+        /* 
+          .container: Zentrierter Hauptcontainer 
+          - max-width: 1200px = maximale Breite für große Bildschirme
+          - margin: 0 auto = horizontal zentrieren
+        */
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        /* 
+          h1: Hauptüberschrift 
+          - text-align: center = zentriert
+          - color: weiß für guten Kontrast
+          - font-size: 2.2em = etwa 35px
+          - margin-bottom: 30px = Abstand nach unten
+        */
+        h1 {
+            text-align: center;
+            color: #e8edf5;
+            font-size: 2.2em;
+            margin-bottom: 30px;
+        }
+        
+        /* 
+          h1 span: Akzentfarbe für "WSS" im Titel 
+          - Leuchtendes Rot für bessere Sichtbarkeit
+          - Hebt den Begriff "WSS" hervor
+        */
+        h1 span {
+            color: #ff6b8a;
+        }
+        
+        /* 
+          h3: Unterüberschriften in Karten 
+          - Weiß für bessere Lesbarkeit
+          - margin-top: 0 = kein oberer Abstand
+          - border-bottom: rote Unterstreichung als Akzent
+          - padding-bottom: 8px = Abstand zur Linie
+        */
+        h3 {
+            color: #e8edf5;
+            margin-top: 0;
+            border-bottom: 2px solid #ff6b8a;
+            padding-bottom: 8px;
+        }
+        
+        /* ============================================
+           KARTEN / CARDS - Container für Inhalte
+           ============================================ */
+        
+        /* 
+          .card: Karten-Container für alle Inhaltsboxen
+          - Hintergrund: Dunkler als Haupt-Hintergrund (mit Transparenz)
+          - border-radius: 12px = abgerundete Ecken
+          - padding: 20px 25px = Innenabstand
+          - margin-bottom: 20px = Abstand zwischen Karten
+          - border: leichter hellerer Rand für Tiefe
+        */
+        .card {
+            background: rgba(36, 52, 71, 0.9);
+            border-radius: 12px;
+            padding: 20px 25px;
+            margin-bottom: 20px;
+            border: 1px solid #2a3a4f;
+        }
+        
+        /* ============================================
+           TEMPERATUR-GRID - Anzeige der Sensoren
+           ============================================ */
+        
+        /* 
+          .temp-grid: Grid-Container für Temperatur-Karten
+          - display: grid = CSS Grid aktivieren
+          - grid-template-columns: repeat(auto-fit, minmax(280px, 1fr))
+            = automatisch anpassende Spalten, mindestens 280px breit
+            = bei mehr Platz werden mehr Spalten erstellt
+          - gap: 20px = Abstand zwischen Karten
+        */
+        .temp-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        /* 
+          .temp-card: Einzelne Temperatur-Karte
+          - Dunkelblauer Hintergrund
+          - border-radius: 12px = abgerundete Ecken
+          - padding: 20px = Innenabstand
+          - border-left: 6px solid #4CAF50 = Grüne linke Kante (Standard)
+          - transition: Sanfter Hover-Effekt (0.3 Sekunden)
+        */
+        .temp-card {
+            background: #1e2d42;
+            border-radius: 12px;
+            padding: 20px;
+            border-left: 6px solid #4CAF50;
+            transition: all 0.3s ease;
+            border: 1px solid #2a3a4f;
+        }
+        
+        /* 
+          .temp-card:hover: Hover-Effekt (Maus darüber)
+          - transform: translateY(-4px) = Leicht nach oben schweben
+          - box-shadow: Schatten für Tiefenwirkung
+          - background: Hellerer Hintergrund für bessere Sichtbarkeit
+        */
+        .temp-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 25px rgba(0,0,0,0.3);
+            background: #243447;
+        }
+        
+        /* 
+          .temp-card-header: Kopfzeile der Temperatur-Karte
+          - display: flex = flexible Anordnung
+          - justify-content: space-between = Gerätename links, RSSI rechts
+          - align-items: center = vertikal zentrieren
+          - margin-bottom: 10px = Abstand zum Temperaturwert
+        */
+        .temp-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+        
+        /* 
+          .temp-card-device: Gerätename (ESP8266 ID)
+          - font-weight: 700 = fett
+          - background: dunkler Hintergrund für Kontrast
+          - padding: 4px 12px = Innenabstand
+          - border-radius: 20px = abgerundet
+          - font-family: 'Courier New', monospace = gleichmäßige Breite
+          - font-size: 0.85em = etwas kleiner
+        */
+        .temp-card-device {
+            font-weight: 700;
+            background: #1a2332;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.85em;
+        }
+        
+        /* 
+          .temp-card-rssi: RSSI (Signalstärke)
+          - font-size: 0.8em = etwas kleiner
+          - color: #8a9bb5 = hellgrau für bessere Lesbarkeit
+          - background: dunkler Hintergrund
+          - padding: 3px 10px = Innenabstand
+          - border-radius: 20px = abgerundet
+        */
+        .temp-card-rssi {
+            font-size: 0.8em;
+            color: #8a9bb5;
+            background: #1a2332;
+            padding: 3px 10px;
+            border-radius: 20px;
+        }
+        
+        /* 
+          .temp-value: Temperatur-Wert (große Zahl)
+          - font-size: 3em = etwa 48px
+          - text-align: center = zentriert
+          - padding: 15px 0 = oberer/unterer Abstand
+          - font-weight: 700 = fett
+          - letter-spacing: -1px = engerer Buchstabenabstand für bessere Lesbarkeit
+        */
+        .temp-value {
+            font-size: 3em;
+            text-align: center;
+            padding: 15px 0;
+            font-weight: 700;
+            letter-spacing: -1px;
+        }
+        
+        /* 
+          .temp-unit: Einheit (°C) kleiner
+          - font-size: 0.4em = 40% der Schriftgröße
+          - font-weight: 400 = normal
+          - color: #8a9bb5 = hellgrau für bessere Lesbarkeit
+        */
+        .temp-unit {
+            font-size: 0.4em;
+            font-weight: 400;
+            color: #8a9bb5;
+        }
+        
+        /* 
+          .temp-card-footer: Fußzeile der Karte
+          - display: flex = flexible Anordnung
+          - justify-content: space-between = Uptime links, Update rechts
+          - font-size: 0.8em = etwas kleiner
+          - color: #8a9bb5 = hellgrau
+          - border-top: obere Trennlinie
+          - padding-top: 10px = Abstand zur Linie
+        */
+        .temp-card-footer {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8em;
+            color: #8a9bb5;
+            border-top: 1px solid #2a3a4f;
+            padding-top: 10px;
+            margin-top: 5px;
+        }
+        
+        /* 
+          .temp-card-footer span: Icons in der Fußzeile
+          - display: flex = für Icon + Text nebeneinander
+          - align-items: center = vertikal zentrieren
+          - gap: 4px = Abstand zwischen Icon und Text
+        */
+        .temp-card-footer span {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+        
+        /* ============================================
+           TEMPERATUR-FARBEN (abhängig vom Wert)
+           ============================================ */
+        
+        /* 
+          Farben für Temperatur-Werte
+          - Grün: Normal (0-30°C)
+          - Orange: Warm (30-40°C) 
+          - Rot: Heiß (>40°C)
+          - Blau: Kalt (<0°C)
+        */
+        .temp-normal { color: #66bb6a; }    /* Grün */
+        .temp-warm   { color: #ffa726; }    /* Orange */
+        .temp-hot    { color: #ef5350; }    /* Rot */
+        .temp-cold   { color: #42a5f5; }    /* Blau */
+        
+        /* 
+          Farben für linke Kanten (entsprechend den Temperatur-Farben)
+          Die linke Kante der Karte ändert sich je nach Temperatur
+        */
+        .border-normal { border-left-color: #66bb6a; }
+        .border-warm   { border-left-color: #ffa726; }
+        .border-hot    { border-left-color: #ef5350; }
+        .border-cold   { border-left-color: #42a5f5; }
+        
+        /* ============================================
+           INPUT-GRUPPEN - Formular-Elemente
+           ============================================ */
+        
+        /* 
+          .input-group: Gruppe für Formular-Elemente
+          - display: flex = flexible Anordnung (nebeneinander)
+          - gap: 12px = Abstand zwischen Elementen
+          - margin: 12px 0 = oberer/unterer Abstand
+          - align-items: center = vertikal zentrieren
+          - flex-wrap: wrap = bei zu wenig Platz umbrechen
+        */
+        .input-group {
+            display: flex;
+            gap: 12px;
+            margin: 12px 0;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        
+        /* 
+          .input-group input: Eingabefelder
+          - flex: 1 = nimmt verfügbaren Platz ein
+          - min-width: 120px = minimale Breite (für kleine Bildschirme)
+          - padding: 10px 14px = Innenabstand für bessere Bedienbarkeit
+          - border-radius: 8px = abgerundete Ecken
+          - border: heller Rand für Sichtbarkeit
+          - background: dunkel für besseren Kontrast
+          - color: hell für bessere Lesbarkeit
+          - transition: Sanfter Farbwechsel bei Fokus
+        */
+        .input-group input {
+            flex: 1;
+            min-width: 120px;
+            padding: 10px 14px;
+            border-radius: 8px;
+            border: 2px solid #2a3a4f;
+            background: #1a2332;
+            color: #e8edf5;
+            font-size: 0.95em;
+            transition: border-color 0.3s;
+        }
+        
+        /* 
+          .input-group input:focus: Fokus-Zustand (wenn angeklickt)
+          - outline: none = Standard-Outline entfernen
+          - border-color: #ff6b8a = Roter Rand für bessere Sichtbarkeit
+          - background: heller für bessere Lesbarkeit
+        */
+        .input-group input:focus {
+            outline: none;
+            border-color: #ff6b8a;
+            background: #1e2d42;
+        }
+        
+        /* 
+          .input-group input::placeholder: Platzhalter-Text
+          - color: #6a7a8f = Hellgrau für bessere Lesbarkeit
+          - Gibt dem Benutzer einen Hinweis, was eingegeben werden soll
+        */
+        .input-group input::placeholder {
+            color: #6a7a8f;
+        }
+        
+        /* ============================================
+           PASSWORD WRAPPER - Container mit Toggle-Button
+           ============================================ */
+        
+        /* 
+          .password-wrapper: Container für Passwort-Feld + Toggle-Button
+          - display: flex = Input + Button nebeneinander
+          - flex: 1 = nimmt verfügbaren Platz ein
+          - min-width: 120px = minimale Breite
+          - align-items: center = vertikal zentrieren
+          - background: dunkel für besseren Kontrast
+          - border: heller Rand für Sichtbarkeit
+          - border-radius: 8px = abgerundete Ecken
+          - transition: Sanfter Farbwechsel bei Fokus
+        */
+        .password-wrapper {
+            display: flex;
+            flex: 1;
+            min-width: 120px;
+            align-items: center;
+            background: #1a2332;
+            border: 2px solid #2a3a4f;
+            border-radius: 8px;
+            transition: border-color 0.3s;
+        }
+        
+        /* 
+          .password-wrapper:focus-within: Wenn Input oder Button fokussiert ist
+          - border-color: #ff6b8a = Roter Rand für bessere Sichtbarkeit
+          - background: heller für bessere Lesbarkeit
+        */
+        .password-wrapper:focus-within {
+            border-color: #ff6b8a;
+            background: #1e2d42;
+        }
+        
+        /* 
+          .password-wrapper input: Passwort-Input
+          - flex: 1 = nimmt verfügbaren Platz ein
+          - border: none = kein eigener Rand (wird vom Wrapper übernommen)
+          - background: transparent = Hintergrund vom Wrapper
+          - padding: 10px 14px = Innenabstand
+          - min-width: 60px = minimale Breite
+          - font-size: 0.95em = normale Schriftgröße
+          - color: hell für bessere Lesbarkeit
+        */
+        .password-wrapper input {
+            flex: 1;
+            border: none;
+            background: transparent;
+            padding: 10px 14px;
+            min-width: 60px;
+            font-size: 0.95em;
+            color: #e8edf5;
+        }
+        
+        /* 
+          .password-wrapper input:focus: Kein Outline (wird vom Wrapper übernommen)
+        */
+        .password-wrapper input:focus {
+            outline: none;
+        }
+        
+        /* 
+          .password-toggle: Toggle-Button für Passwort
+          - background: transparent = kein Hintergrund
+          - border: none = kein Rand
+          - padding: 8px 12px = Innenabstand
+          - cursor: pointer = Hand-Cursor für bessere Bedienbarkeit
+          - font-size: 1.2em = etwas größer für bessere Sichtbarkeit
+          - color: #8a9bb5 = hellgrau
+          - transition: Sanfter Farbwechsel bei Hover
+          - border-radius: 0 8px 8px 0 = abgerundete Ecken (nur rechts)
+          - min-width: 44px = Barrierefreiheit (mindestens 44px)
+          - min-height: 44px = Barrierefreiheit
+        */
+        .password-toggle {
+            background: transparent;
+            border: none;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 1.2em;
+            color: #8a9bb5;
+            transition: color 0.3s;
+            border-radius: 0 8px 8px 0;
+            min-width: 44px;
+            min-height: 44px;
+        }
+        
+        /* 
+          .password-toggle:hover: Hover-Effekt (Maus darüber)
+          - color: #ff6b8a = Rote Farbe für bessere Sichtbarkeit
+          - background: leichter roter Hintergrund
+        */
+        .password-toggle:hover {
+            color: #ff6b8a;
+            background: rgba(255, 107, 138, 0.1);
+        }
+        
+        /* 
+          .password-toggle.active: Wenn Passwort sichtbar ist
+          - color: #66bb6a = Grüne Farbe (Passwort ist sichtbar)
+        */
+        .password-toggle.active {
+            color: #66bb6a;
+        }
+        
+        /* ============================================
+           BUTTONS - Aktionen
+           ============================================ */
+        
+        /* 
+          button: Allgemeiner Button-Stil
+          - padding: 10px 20px = Innenabstand
+          - border-radius: 8px = abgerundete Ecken
+          - border: none = kein Rand
+          - font-size: 0.95em = normale Schriftgröße
+          - font-weight: 600 = fett
+          - cursor: pointer = Hand-Cursor
+          - transition: Sanfte Animationen (0.3 Sekunden)
+          - display: inline-flex = für Icon + Text nebeneinander
+          - align-items: center = vertikal zentrieren
+          - gap: 6px = Abstand zwischen Icon und Text
+        */
+        button {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            font-size: 0.95em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        /* 
+          .btn-connect: Verbinden-Button (Grün)
+          - background: #2e7d32 = Dunkelgrün
+          - color: white = weißer Text
+        */
+        .btn-connect {
+            background: #2e7d32;
+            color: white;
+        }
+        /* 
+          .btn-connect:hover: Hover-Effekt
+          - background: helleres Grün
+          - transform: scale(1.02) = leicht vergrößern
+          - box-shadow: Schatten für Tiefe
+        */
+        .btn-connect:hover {
+            background: #388e3c;
+            transform: scale(1.02);
+            box-shadow: 0 4px 15px rgba(46, 125, 50, 0.3);
+        }
+        
+        /* 
+          .btn-disconnect: Trennen-Button (Rot)
+        */
+        .btn-disconnect {
+            background: #c62828;
+            color: white;
+        }
+        .btn-disconnect:hover {
+            background: #d32f2f;
+            transform: scale(1.02);
+            box-shadow: 0 4px 15px rgba(198, 40, 40, 0.3);
+        }
+        
+        /* 
+          .btn-clear: Logs löschen-Button (Grau)
+        */
+        .btn-clear {
+            background: #455a64;
+            color: white;
+        }
+        .btn-clear:hover {
+            background: #546e7a;
+            transform: scale(1.02);
+            box-shadow: 0 4px 15px rgba(69, 90, 100, 0.3);
+        }
+        
+        /* ============================================
+           STATUS-ANZEIGE
+           ============================================ */
+        
+        /* 
+          .status-display: Status-Anzeige
+          - font-size: 1.1em = etwas größer
+          - padding: 12px 16px = Innenabstand
+          - border-radius: 8px = abgerundete Ecken
+          - background: #1a2332 = dunkler Hintergrund
+          - margin: 5px 0 = oberer/unterer Abstand
+          - font-weight: 600 = fett
+        */
+        .status-display {
+            font-size: 1.1em;
+            padding: 12px 16px;
+            border-radius: 8px;
+            background: #1a2332;
+            margin: 5px 0;
+            font-weight: 600;
+        }
+        
+        /* 
+          .status-online: Status-Farbe für Online
+          - color: #66bb6a = Grün
+          - background: dunkelgrün für besseren Kontrast
+        */
+        .status-online {
+            color: #66bb6a;
+            background: #1b3a2a;
+        }
+        
+        /* 
+          .status-offline: Status-Farbe für Offline
+          - color: #ef5350 = Rot
+          - background: dunkelrot für besseren Kontrast
+        */
+        .status-offline {
+            color: #ef5350;
+            background: #3a1a1a;
+        }
+        
+        /* 
+          .status-connecting: Status-Farbe für Verbindungsaufbau
+          - color: #ffa726 = Orange
+          - background: dunkelorange für besseren Kontrast
+        */
+        .status-connecting {
+            color: #ffa726;
+            background: #3a2a1a;
+        }
+        
+        /* 
+          #client-id: Client-ID Anzeige
+          - font-size: 0.85em = etwas kleiner
+          - color: #8a9bb5 = hellgrau
+          - margin-top: 5px = Abstand nach oben
+          - font-family: 'Courier New', monospace = gleichmäßige Breite
+        */
+        #client-id {
+            font-size: 0.85em;
+            color: #8a9bb5;
+            margin-top: 5px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        /* 
+          #device-count: Anzahl der aktiven Geräte
+          - font-size: 0.95em = normale Schriftgröße
+          - color: #e8edf5 = weiß
+          - margin-top: 8px = Abstand nach oben
+          - font-weight: 600 = fett
+        */
+        #device-count {
+            font-size: 0.95em;
+            color: #e8edf5;
+            margin-top: 8px;
+            font-weight: 600;
+        }
+        
+        /* ============================================
+           NACHRICHTEN / LOGS
+           ============================================ */
+        
+        /* 
+          .messages-card: Container für Log-Nachrichten
+          - max-height: 300px = begrenzte Höhe (nicht zu groß)
+          - overflow-y: auto = Scrollbalken bei Überlauf
+        */
+        .messages-card {
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        
+        /* 
+          Scrollbar-Stile für WebKit-Browser (Chrome, Edge, Safari)
+          ::-webkit-scrollbar = gesamter Scrollbalken
+          ::-webkit-scrollbar-track = Hintergrund des Scrollbalkens
+          ::-webkit-scrollbar-thumb = Griff des Scrollbalkens
+        */
+        .messages-card::-webkit-scrollbar {
+            width: 6px; /* Breite des Scrollbalkens */
+        }
+        .messages-card::-webkit-scrollbar-track {
+            background: #1a2332;
+            border-radius: 3px;
+        }
+        .messages-card::-webkit-scrollbar-thumb {
+            background: #2a3a4f;
+            border-radius: 3px;
+        }
+        .messages-card::-webkit-scrollbar-thumb:hover {
+            background: #3a4a5f;
+        }
+        
+        /* 
+          .msg-item: Einzelne Log-Nachricht
+          - border-radius: 8px = abgerundete Ecken
+          - padding: 10px 14px = Innenabstand
+          - margin-bottom: 8px = Abstand zur nächsten Nachricht
+          - border-left: 4px solid #ff6b8a = Roter linker Rand (Akzent)
+          - font-size: 0.85em = etwas kleiner
+          - word-break: break-all = lange Wörter umbrechen (verhindert Überlauf)
+          - background: #1a2332 = dunkler Hintergrund
+          - transition: Sanfter Hover-Effekt
+        */
+        .msg-item {
+            border-radius: 8px;
+            padding: 10px 14px;
+            margin-bottom: 8px;
+            border-left: 4px solid #ff6b8a;
+            font-size: 0.85em;
+            word-break: break-all;
+            background: #1a2332;
+            transition: background 0.2s;
+        }
+        
+        /* 
+          .msg-item:hover: Hover-Effekt (Maus darüber)
+          - background: heller für bessere Sichtbarkeit
+        */
+        .msg-item:hover {
+            background: #1e2d42;
+        }
+        
+        /* 
+          .msg-time: Zeitstempel der Nachricht
+          - color: #6a7a8f = hellgrau
+          - font-size: 0.75em = kleiner
+        */
+        .msg-time {
+            color: #6a7a8f;
+            font-size: 0.75em;
+        }
+        
+        /* 
+          .msg-topic: MQTT Topic
+          - font-weight: 700 = fett
+          - color: #ff6b8a = Rot für bessere Lesbarkeit
+          - font-size: 0.85em = etwas kleiner
+        */
+        .msg-topic {
+            font-weight: 700;
+            color: #ff6b8a;
+            font-size: 0.85em;
+        }
+        
+        /* 
+          .msg-payload: Nachrichteninhalt
+          - color: #e8edf5 = weiß
+          - margin-top: 3px = Abstand zum Topic
+        */
+        .msg-payload {
+            color: #e8edf5;
+            margin-top: 3px;
+        }
+        
+        /* 
+          .msg-error: Fehler-Nachricht (Rot)
+          - border-left-color: #ef5350 = Roter linker Rand
+          - background: dunkelrot für besseren Kontrast
+        */
+        .msg-error {
+            border-left-color: #ef5350;
+            background: #2a1a1a;
+        }
+        .msg-error .msg-topic {
+            color: #ef5350;
+        }
+        
+        /* 
+          .msg-system: System-Nachricht (Grün)
+          - border-left-color: #66bb6a = Grüner linker Rand
+          - background: dunkelgrün für besseren Kontrast
+        */
+        .msg-system {
+            border-left-color: #66bb6a;
+            background: #1a2a1a;
+        }
+        .msg-system .msg-topic {
+            color: #66bb6a;
+        }
+        
+        /* 
+          .placeholder: Platzhalter wenn keine Daten
+          - grid-column: 1/-1 = nimmt gesamte Grid-Breite ein
+          - text-align: center = zentriert
+          - padding: 40px = großer Innenabstand
+          - color: #6a7a8f = hellgrau
+          - background: #1a2332 = dunkler Hintergrund
+          - border-radius: 12px = abgerundete Ecken
+          - border: 2px dashed #2a3a4f = gestrichelter Rand
+        */
+        .placeholder {
+            grid-column: 1/-1;
+            text-align: center;
+            padding: 40px;
+            color: #6a7a8f;
+            background: #1a2332;
+            border-radius: 12px;
+            border: 2px dashed #2a3a4f;
+        }
+        
+        /* ============================================
+           RESPONSIVE DESIGN - Für mobile Geräte
+           ============================================ */
+        
+        /* 
+          Media Query: Bildschirme kleiner als 600px (Smartphones)
+          - Weniger Padding für mehr Platz
+          - 1-spaltiges Layout für bessere Lesbarkeit
+          - Volle Breite für Inputs und Buttons
+          - Kleinere Schrift für bessere Lesbarkeit
+        */
+        @media (max-width: 600px) {
+            body { padding: 10px; }
+            .temp-grid { grid-template-columns: 1fr; }
+            .input-group { flex-direction: column; }
+            .input-group input { width: 100%; }
+            .password-wrapper { width: 100%; }
+            .input-group button { width: 100%; justify-content: center; }
+            .temp-value { font-size: 2.2em; }
+            h1 { font-size: 1.6em; }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- ============================================
+         HTML STRUKTUR - Sichtbarer Inhalt
+         ============================================ -->
+    
+    <div class="container">
+        
+        <!-- ===== HAUPTTITEL ===== -->
+        <h1>🌡️ IoT <span>WSS</span> Dashboard</h1>
+        
+        <!-- ============================================
+             TEMPERATUR-ANZEIGE (wird dynamisch befüllt)
+             ============================================ -->
+        <div id="temp-grid" class="temp-grid">
+            <!-- 
+              Platzhalter, wird durch JavaScript ersetzt
+              Sobald Daten empfangen werden, werden die Karten gerendert
+            -->
+            <div class="placeholder">📡 Warte auf Temperaturdaten...</div>
+        </div>
+        
+        <!-- ============================================
+             VERBINDUNGS-KONFIGURATION
+             ============================================ -->
+        <div class="card">
+            <h3>🔧 Verbindung</h3>
+            
+            <!-- 
+              Host und Port Eingabe
+              - Host: IP-Adresse des MQTT Brokers (192.168.0.106)
+              - Port: WebSocket Port (8085 für ws://, 8084 für wss://)
+            -->
+            <div class="input-group">
+                <input type="text" id="host" value="192.168.0.106" placeholder="Host">
+                <input type="text" id="port" value="8085" placeholder="Port">
+            </div>
+            
+            <!-- 
+              Benutzername Eingabe
+              - MQTT Benutzername für Authentifizierung
+              - Standard: test_device
+            -->
+            <div class="input-group">
+                <input type="text" id="username" value="test_device" placeholder="Benutzername">
+            </div>
+            
+            <!-- 
+              Passwort mit Toggle-Button
+              - Passwort wird nicht im Code gespeichert
+              - Toggle-Button zeigt/versteckt das Passwort
+              - Standard: test_password_123
+            -->
+            <div class="input-group">
+                <div class="password-wrapper">
+                    <input type="password" id="password" placeholder="Passwort" value="test_password_123">
+                    <button type="button" class="password-toggle" id="togglePassword" onclick="togglePasswordVisibility()" title="Passwort anzeigen/verstecken">
+                        👁️
+                    </button>
+                </div>
+            </div>
+            
+            <!-- 
+              Aktions-Buttons
+              - Verbinden: Baut die WebSocket Verbindung auf
+              - Trennen: Beendet die Verbindung
+              - Logs löschen: Leert die Log-Anzeige
+            -->
+            <div class="input-group">
+                <button class="btn-connect" onclick="connectWSS()">🔌 Verbinden</button>
+                <button class="btn-disconnect" onclick="disconnectWSS()">🔌 Trennen</button>
+                <button class="btn-clear" onclick="clearMessages()">🗑️ Logs löschen</button>

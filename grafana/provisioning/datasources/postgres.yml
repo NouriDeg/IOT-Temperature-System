@@ -1,0 +1,27 @@
+# ============================================================================
+# GRAFANA DATA SOURCE: PostgreSQL
+# ============================================================================
+# Diese Datei konfiguriert automatisch die PostgreSQL Datenquelle in Grafana
+# 
+# Wird beim Start von Grafana automatisch geladen.
+# Die Datenquelle heißt dann "PostgreSQL IoT" im Grafana UI.
+# ============================================================================
+
+apiVersion: 1
+
+datasources:
+  - name: PostgreSQL IoT                        # Name in Grafana
+    type: postgres                              # Datenbank-Typ
+    access: proxy                               # Proxy-Modus (empfohlen)
+    url: postgres_db:5432                       # Container-Name:Port
+    database: sensordb                          # Datenbank-Name
+    user: sensor_user                           # Datenbank-Benutzer
+    secureJsonData:
+      password: ${DB_PASSWORD}                  # Passwort aus .env
+    jsonData:
+      sslmode: disable                          # SSL deaktiviert (internes Netzwerk)
+      postgresVersion: 1500                     # PostgreSQL 15
+      timescaledb: false                        # Kein TimescaleDB
+      connectTimeout: 10                        # Timeout in Sekunden
+    isDefault: true                             # Als Standard-Datenquelle setzen
+    editable: true                              # Bearbeitbar im UI

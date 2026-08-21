@@ -46,7 +46,7 @@ load_dotenv()
 # =============================================================================
 
 # WSS Verbindungsparameter (mit Default-Werten falls nicht in .env)
-WSS_HOST = os.getenv('WSS_HOST', '192.168.0.105')      # Broker IP-Adresse
+WSS_HOST = os.getenv('WSS_HOST', '192.168.0.106')      # Broker IP-Adresse
 WSS_PORT = int(os.getenv('WSS_PORT', 8084))            # WSS Port (verschlüsselt)
 WSS_USER = os.getenv('WSS_USER', 'test_device')        # MQTT Benutzername
 WSS_PASSWORD = os.getenv('WSS_PASSWORD', '')           # MQTT Passwort (MUSS in .env sein!)

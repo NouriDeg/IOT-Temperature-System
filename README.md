@@ -157,7 +157,7 @@ Provisioning	Python + Paho MQTT	3.11
 
 * HTTP OTA via Backend:
 * Mit curl (PowerShell)
-curl -X POST http://192.168.0.105:5000/api/firmware/upload -F "file=@firmware.bin" -F "version=1.0.1"
+curl -X POST http://192.168.0.106:5000/api/firmware/upload -F "file=@firmware.bin" -F "version=1.0.1"
 
 * Response erwartet: {"status":"success","message":"Firmware uploaded successfully","version":"1.0.1"}
   
@@ -173,7 +173,7 @@ docker logs api_backend --tail 20
 
 * OTA Verbindung fehlgeschlagen: Prüfe ob ESP8266 und PC im gleichen Netzwerk sind
 * Passwort falsch: Prüfe ota_config.h Passwort
-* Firmware Download fehlgeschlagen:	Prüfe ob Backend läuft (curl http://192.168.0.105:5000/api/health)
+* Firmware Download fehlgeschlagen:	Prüfe ob Backend läuft (curl http://192.168.0.106:5000/api/health)
 * MQTT Befehl nicht empfangen: Prüfe mit MQTT Explorer ob Nachricht ankommt
 * Update hängt bei 0%: Prüfe Speicherplatz des ESP8266 (heap)
 
@@ -209,10 +209,10 @@ status/{device_id}/online
 
 ### Dashboard und API testen:
 #### 1.Dashboard öffnen
-* start http://192.168.0.105:8080
+* start http://192.168.0.106:8080
   
 #### 2.API testen
-* curl http://192.168.0.105:5000/api/health
+* curl http://192.168.0.106:5000/api/health
 
 ## Datenbank Schema
 
@@ -298,7 +298,7 @@ MQTT_BRIDGE_PASSWORD=bridge_passwort
 MQTT_PROVISION_PASSWORD=provisioner_passwort
 
 ## Broker Adresse (IP des Hosts)
-MQTT_BROKER_ADDRESS=192.168.0.105
+MQTT_BROKER_ADDRESS=192.168.0.106
 
 ## 3. TLS Zertifikate generieren
 bash
@@ -307,7 +307,7 @@ bash
 * openssl genrsa -out ca.key 2048
 * openssl req -new -x509 -days 365 -key ca.key -out ca.crt -subj "/CN=MQTT-CA"
 * openssl genrsa -out server.key 2048
-* openssl req -new -key server.key -out server.csr -subj "/CN=192.168.0.105"
+* openssl req -new -key server.key -out server.csr -subj "/CN=192.168.0.106"
 * openssl x509 -req -days 365 -in server.csr -CA ca.crt -CAkey ca.key -set_serial 01 -out server.crt
 cd ..
 
@@ -359,13 +359,13 @@ IPAddress gateway(192, 168, 0, 1);
 IPAddress subnet(255, 255, 255, 0);
 
 * // Provisioning Service
-const char* PROVISIONING_HOST = "192.168.0.105";
+const char* PROVISIONING_HOST = "192.168.0.106";
 const int PROVISIONING_PORT = 1883;
 
 ### Konfiguration in Provisioning.h (IP-Address anpassen oder ändern):
    
 * strlcpy(creds.device_id, device_id.c_str(), sizeof(creds.device_id));
-strlcpy(creds.mqtt_broker, doc["mqtt_broker"] | "192.168.0.105", sizeof(creds.mqtt_broker));
+strlcpy(creds.mqtt_broker, doc["mqtt_broker"] | "192.168.0.106", sizeof(creds.mqtt_broker));
 creds.mqtt_port = doc["mqtt_port"] | 8883;
 strlcpy(creds.mqtt_user, doc["mqtt_username"] | "", sizeof(creds.mqtt_user));
 strlcpy(creds.mqtt_password, doc["mqtt_password"] | "", sizeof(creds.mqtt_password));
@@ -416,16 +416,16 @@ docker exec postgres_db pg_dump -U sensor_user sensordb > backup.sql
 ### Dashboard Zugriff:
 
 Service	URL	Beschreibung
-Backend Dashboard	http://192.168.0.105:5000	Vollständiges Dashboard mit Diagramm
-Frontend Dashboard	http://192.168.0.105:8080	Einfaches Dashboard
-API Health Check	http://192.168.0.105:5000/api/health	Statusabfrage
+Backend Dashboard	http://192.168.0.106:5000	Vollständiges Dashboard mit Diagramm
+Frontend Dashboard	http://192.168.0.106:8080	Einfaches Dashboard
+API Health Check	http://192.168.0.106:5000/api/health	Statusabfrage
 Datenbank Abfragen
 bash
 
 ### Öffne die HTML WSS-Datei im Browser
 start "file:///C:/Users/User/Desktop/Ye_SIC/IOT-Temperature-System/wss-demo/html/wss-all-browser.html"
 
-Host: 192.168.0.105
+Host: 192.168.0.106
 
 Port: 8084
 
@@ -435,7 +435,7 @@ python wss_client_secure.py
 ### WSS Über MQTT Explorer
 Protocol: ws://
 
-Host: 192.168.0.105
+Host: 192.168.0.106
 
 Port: 8084
 

@@ -1,0 +1,53 @@
+{
+  "title": "IoT Temperature Dashboard",
+  "uid": "iot-temp-dashboard",
+  "version": 1,
+  "timezone": "browser",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Aktuelle Temperaturen",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0},
+      "targets": [
+        {
+          "format": "table",
+          "group": [],
+          "metricColumn": "none",
+          "rawQuery": true,
+          "rawSql": "SELECT device_id, temp FROM sensor_data ORDER BY timestamp DESC LIMIT 1",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Temperaturverlauf (24h)",
+      "type": "graph",
+      "gridPos": {"h": 8, "w": 8, "x": 4, "y": 0},
+      "targets": [
+        {
+          "format": "time_series",
+          "group": [],
+          "metricColumn": "none",
+          "rawQuery": true,
+          "rawSql": "SELECT timestamp, temp FROM sensor_data WHERE device_id = '$device' AND timestamp > NOW() - INTERVAL '24 hours' ORDER BY timestamp",
+          "refId": "A"
+        }
+      ]
+    }
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "device",
+        "type": "query",
+        "query": "SELECT DISTINCT device_id FROM sensor_data ORDER BY device_id",
+        "refresh": 2,
+        "includeAll": true,
+        "multi": false,
+        "queryValue": ""
+      }
+    ]
+  }
+}

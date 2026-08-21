@@ -4,16 +4,18 @@
 # Jeder Benutzer bekommt nur die minimal nötigen Rechte
 
 # ------------------------------------------------------------
-# BRIDGE SERVICE (nur Leserechte fuer Sensordaten)
+# 1. BRIDGE SERVICE (MQTT → PostgreSQL)
 # ------------------------------------------------------------
+# Die Bridge liest Sensordaten und schreibt sie in die DB
 user bridge_user
 topic read sensor/#
 topic read status/+/online
 topic read lwt/+
 
 # ------------------------------------------------------------
-# PROVISIONER SERVICE
+# 2. PROVISIONER SERVICE
 # ------------------------------------------------------------
+# Der Provisioner hört auf Requests und sendet Responses
 user provisioner
 topic read provisioning/request
 topic write provisioning/response
@@ -21,8 +23,10 @@ topic read provisioning/status
 topic write provisioning/status
 
 # ------------------------------------------------------------
-# TEST_DEVICE (vollständige Rechte fuer Tests)
+# 3. TEST_DEVICE (Universeller Benutzer für mehrere ESP8266)
 # ------------------------------------------------------------
+# Alle ESP8266 können diesen Benutzer verwenden
+# Er hat volle Rechte (für Entwicklung/Tests)
 user test_device
 topic read #
 topic write #
@@ -39,9 +43,10 @@ topic read commands/+
 topic write commands/+
 
 # ------------------------------------------------------------
-# DYNAMISCHE GERÄTE (für mehrere ESP8266 - Least Privilege)
+# 4. DYNAMISCHE GERÄTE (Für viele ESP8266 - sicherer)
 # ------------------------------------------------------------
 # Jedes Gerät darf nur auf seine eigenen Topics schreiben
+# pattern %u = Benutzername wird automatisch eingesetzt
 pattern read sensor/#
 pattern write sensor/temperatur
 pattern read status/%u/online
@@ -49,3 +54,13 @@ pattern write status/%u/online
 pattern read lwt/%u
 pattern write lwt/%u
 pattern read commands/%u/ota
+
+# ------------------------------------------------------------
+# 5. BEISPIEL: Gerät mit eigenem Benutzer
+# ------------------------------------------------------------
+# Für mehr Sicherheit: Jedes Gerät bekommt eigenen Benutzer
+# user esp8266_01
+# topic write sensor/esp8266_01/temperatur
+# topic read commands/esp8266_01/+
+# topic write status/esp8266_01/online
+# topic write lwt/esp8266_01

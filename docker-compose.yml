@@ -1,20 +1,23 @@
 # ============================================================================
-# DOCKER COMPOSE KONFIGURATION - 3-ZONEN-SICHERHEITSARCHITEKTUR
+# DOCKER COMPOSE KONFIGURATION - 3-ZONEN-SICHERHEITSARCHITEKTUR + GRAFANA
 # ============================================================================
 # 
-# Version: 4.0 (Security Enhanced)
+# Version: 4.1 (Grafana Integration)
 # Datum: 30.04.2026
 # Autor: Nouri Deg.
 
 # Diese Konfiguration implementiert eine professionelle Sicherheitsarchitektur
 # mit drei Netzwerk-Zonen (DMZ, Internal, Database) nach dem Least-Privilege-Prinzip.
 # 
+# NEU: Grafana für professionelle Visualisierung hinzugefügt
+# 
 # NETZWERKARCHITEKTUR:
 # 
 #   DMZ NETZWERK (Public) - Von außen erreichbare Services                 
 #   - frontend (Port 8080): Web Dashboard                                  
 #   - backend (Port 5000): REST API                                        
-#   - mosquitto (Ports 1883,8883,8084,8085): MQTT Broker                  
+#   - mosquitto (Ports 1883,8883,8084,8085): MQTT Broker
+#   - grafana (Port 3000): Visualisierungs-Dashboard (NEU!)              
 # 
 #                                    │
 #                                    ▼ (nur erlaubte Kommunikation)
@@ -41,7 +44,7 @@
 # ============================================================================
 
 # ============================================================================
-# NETZWERKE (3 Security-Zonen)
+# NETZWERKE (3 Security-Zonen + Grafana)
 # ============================================================================
 # Die Netzwerke wurden bereits mit docker network create erstellt:
 # - docker network create --driver bridge --subnet=10.100.0.0/24 iot_dmz_network
@@ -53,9 +56,9 @@ networks:
   # 1. DMZ NETZWERK (Public: Demilitarized Zone)
   # --------------------------------------------------------------------------
   # Zweck: Aufnahme von Services, die von außen erreichbar sein müssen
-  # Enthält: frontend, backend, mosquitto, nginx_wss_proxy
+  # Enthält: frontend, backend, mosquitto, nginx_wss_proxy, grafana (NEU!)
   # Sicherheit: Keine Verbindung zum Database Netzwerk!
-  # Von außen erreichbar: HTTP (8080), API (5000), MQTT (1883,8883,8084,8085)
+  # Von außen erreichbar: HTTP (8080), API (5000), MQTT (1883,8883,8084,8085), Grafana (3000)
   dmz_network:
     name: iot_dmz_network
     external: true                    # Bestehendes Netzwerk verwenden (nicht neu erstellen)
@@ -100,6 +103,15 @@ volumes:
   # Mosquitto Logs (für Debugging)
   mosquitto_log:
     name: iot_mosquitto_log
+  # ==========================================================================
+  # NEU: GRAFANA VOLUMES
+  # ==========================================================================
+  # Grafana persistente Daten (Dashboards, Datenquellen, Einstellungen)
+  grafana_data:
+    name: iot_grafana_data
+  # Grafana Plugins (Erweiterungen wie Pie-Chart, Worldmap, etc.)
+  grafana_plugins:
+    name: iot_grafana_plugins
 
 # ============================================================================
 # SERVICES (Container)
@@ -138,12 +150,12 @@ services:
     
     # Volumes für Konfiguration und Persistenz
     volumes:
-      - ./mosquitto/config:/mosquitto/config:ro      # Konfiguration (read-only)
-      - mosquitto_data:/mosquitto/data               # Persistente Daten
-      - mosquitto_log:/mosquitto/log                 # Log-Dateien
-      - ./mosquitto/passwd:/mosquitto/passwd:ro      # Passwortdatei (read-only)
-      - ./certs:/mosquitto/certs:ro                  # TLS Zertifikate (read-only)
-      - ./mosquitto/acls:/mosquitto/acls:ro          # ACL Datei (read-only)
+      - ./mosquitto/config:/mosquitto/config:ro     # Konfiguration (read-only)
+      - ./mosquitto/data:/mosquitto/data:rw        # Data writeable
+      - ./mosquitto/log:/mosquitto/log:rw          # Logs writeable
+      #- ./mosquitto/passwd:/mosquitto/passwd:rw    # ← WICHTIG: rw!
+      - ./mosquitto/acls:/mosquitto/acls:rw        # ← WICHTIG: rw!
+      - ./certs:/mosquitto/certs:ro         # ACL Datei (read-only)
     
     environment:
       - TZ=Europe/Berlin                             # Zeitzone für korrekte Logs
@@ -211,8 +223,16 @@ services:
     logging:
       driver: "json-file"
       options:
-        max-size: "10m"                              # Max. 10 MB pro Datei
-        max-file: "3"                                # Max. 3 Dateien
+        max-size: "10m"
+        max-file: "3"
+    
+    # Gesundheitscheck mit Python (curl ist nicht im Container installiert)
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/api/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # --------------------------------------------------------------------------
   # 3. FRONTEND (Nginx Static Webserver)
@@ -252,11 +272,135 @@ services:
         max-file: "3"
 
   # ==========================================================================
+  # NEU: GRAFANA - PROFESSIONELLE VISUALISIERUNG
+  # ==========================================================================
+  # 
+  # --------------------------------------------------------------------------
+  # 4. GRAFANA (Visualisierungs-Dashboard)
+  # --------------------------------------------------------------------------
+  # Aufgabe: Professionelle Dashboards für Temperaturdaten
+  # 
+  # Funktionen:
+  # - Echtzeit-Dashboards mit Charts und Graphen
+  # - PostgreSQL Datenquelle (direkter Zugriff)
+  # - Benutzerdefinierte Panels (Stat, Graph, Table, etc.)
+  # - Alarmierung (optional via E-Mail/Telegram)
+  # - Export von Dashboards als JSON
+  # 
+  # Ports:
+  # - 3000: Grafana Web-Interface
+  # 
+  # Netzwerke: DMZ (für Web-Zugriff) + Database (für Datenbankzugriff)
+  # 
+  # Zugang:
+  # - URL: http://192.168.0.106:3000
+  # - Benutzer: admin (Standard)
+  # - Passwort: admin (wird beim ersten Login geändert)
+  # 
+  # Sicherheit:
+  # - Standard-Passwort muss beim ersten Login geändert werden!
+  # - Datenbank-Zugriff nur über database_network (isoliert)
+  # - Kein externer Datenbank-Port nötig
+  # --------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest                    # Offizielles Grafana Image
+    container_name: grafana                         # Fester Container-Name
+    restart: unless-stopped                         # Automatischer Neustart
+    
+    # Exponierte Ports (Host:Container)
+    ports:
+      - "3001:3000"                                 # Grafana Web-Interface
+    
+    # Umgebungsvariablen für Grafana Konfiguration
+    environment:
+      # Grundkonfiguration
+      - GF_SERVER_ROOT_URL=http://192.168.0.106:3001  # Externe URL für Links
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true           # Sub-Path Unterstützung
+      
+      # Sicherheit (Standard-Passwort muss geändert werden!)
+      - GF_SECURITY_ADMIN_USER=admin                 # Admin-Benutzername
+      - GF_SECURITY_ADMIN_PASSWORD=admin             # Admin-Passwort (ändern beim ersten Login!)
+      - GF_SECURITY_ALLOW_EMBEDDING=true             # Erlaubt Einbettung in iFrames
+      - GF_SECURITY_COOKIE_SECURE=false              # Kein HTTPS zwingend (für Entwicklung)
+      
+      # Datenbank (Grafana eigene Konfiguration)
+      # - GF_DATABASE_TYPE=postgres                    # PostgreSQL für Grafana Config (optional)
+      # - GF_DATABASE_HOST=postgres_db:5432            # Nutzt existierende DB (optional)
+      # - GF_DATABASE_NAME=grafana                    # Separate DB für Grafana Config
+      # - GF_DATABASE_USER=grafana_user                # Eigenen Benutzer für Grafana
+      # - GF_DATABASE_PASSWORD=${GRAFANA_DB_PASSWORD}  # Passwort aus .env
+      
+      # Benutzer & Authentifizierung
+      - GF_AUTH_ANONYMOUS_ENABLED=false              # Kein anonymer Zugriff
+      - GF_AUTH_BASIC_ENABLED=true                   # Basic Auth aktiviert
+      
+      # Plugins (zusätzliche Visualisierungen)
+      - GF_INSTALL_PLUGINS=grafana-piechart-panel,grafana-worldmap-panel
+      
+      # Zeitzone
+      - TZ=Europe/Berlin
+      
+      # Logging
+      - GF_LOG_LEVEL=info                            # Log-Level (info, debug, warn, error)
+      - GF_LOG_MODE=console file                     # Log-Ausgabe: Console + Datei
+      
+      # Server-Einstellungen
+      - GF_SERVER_HTTP_PORT=3000                     # HTTP Port
+      - GF_SERVER_PROTOCOL=http                      # HTTP (kein HTTPS für Entwicklung)
+      
+      # Features (experimentelle Features aktivieren)
+      #- GF_FEATURE_TOGGLES_ENABLE=publicDashboards   # Öffentliche Dashboards (optional)
+    
+    # Volumes für Persistenz
+    volumes:
+      - grafana_data:/var/lib/grafana                # Persistente Grafana-Daten
+      - grafana_plugins:/var/lib/grafana/plugins     # Plugins-Verzeichnis
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro  # Automatische Provisionierung (optional)
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro  # Vordefinierte Dashboards (optional)
+    
+    # Wartet auf PostgreSQL (Datenbank muss verfügbar sein)
+    depends_on:
+      postgres:
+        condition: service_healthy                  # Wartet auf gesunde DB
+    
+    # Dual-Netzwerk: DMZ (für Web-Zugriff) + Database (für Datenbankzugriff)
+    networks:
+      - dmz_network                                  # Für Browser-Zugriff
+      - database_network                             # Für direkten DB-Zugriff
+    
+    # Sicherheitsoptionen
+    security_opt:
+      - no-new-privileges:true                      # Keine Privilegien-Eskalation
+    
+    # Gesundheitscheck - prüft ob Grafana API erreichbar ist
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # Logging mit Rotation
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Ressourcen-Begrenzung (optional)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       memory: 512M
+    #     reservations:
+    #       memory: 256M
+
+  # ==========================================================================
   # INTERNAL NETZWERK (Backend - Kein externer Zugriff!)
   # ==========================================================================
 
   # --------------------------------------------------------------------------
-  # 4. MQTT BRIDGE (Python)
+  # 5. MQTT BRIDGE (Python)
   # --------------------------------------------------------------------------
   # Aufgabe: Verbindet MQTT mit PostgreSQL
   # 
@@ -310,7 +454,7 @@ services:
         max-file: "3"
 
   # --------------------------------------------------------------------------
-  # 5. PROVISIONING SERVICE (Python)
+  # 6. PROVISIONING SERVICE (Python)
   # --------------------------------------------------------------------------
   # Aufgabe: Automatisches Geräte-Onboarding
   # 
@@ -372,7 +516,7 @@ services:
   # ==========================================================================
 
   # --------------------------------------------------------------------------
-  # 6. POSTGRESQL DATABASE (Nur Database Network)
+  # 7. POSTGRESQL DATABASE (Nur Database Network)
   # --------------------------------------------------------------------------
   # Aufgabe: Zentrale Datenbank für alle persistenten Daten
   # 
@@ -380,6 +524,7 @@ services:
   # - sensor_data: Temperaturmessungen (Zeitreihen)
   # - device_status: Online/Offline Status der Geräte
   # - devices: Provisionierte Geräte mit Credentials
+  # - grafana: (optional) Grafana Konfigurationsdatenbank
   # 
   # Sicherheit:
   # - NUR database_network (absolut isoliert!)
@@ -423,7 +568,7 @@ services:
   # ==========================================================================
 
   # --------------------------------------------------------------------------
-  # 7. PGADMIN (Nur Entwicklung - mit dev-Profil)
+  # 8. PGADMIN (Nur Entwicklung - mit dev-Profil)
   # --------------------------------------------------------------------------
   # Aufgabe: Grafische Datenbankverwaltung
   # 
@@ -465,7 +610,7 @@ services:
       - no-new-privileges:true
 
   # --------------------------------------------------------------------------
-  # 8. NGINX WSS PROXY (Optional - mit wss-Profil)
+  # 9. NGINX WSS PROXY (Optional - mit wss-Profil)
   # --------------------------------------------------------------------------
   # Aufgabe: WebSocket Secure Proxy für MQTT over WSS
   # 
@@ -498,3 +643,34 @@ services:
     
     security_opt:
       - no-new-privileges:true
+
+  # --------------------------------------------------------------------------
+  # 10. SWAGGER-UI (API Dokumentation - mit swagger-Profil)
+  # --------------------------------------------------------------------------
+  # Aufgabe: Interaktive API Dokumentation
+  # 
+  # Funktionen:
+  # - Anzeige der OpenAPI Spezifikation
+  # - Testen der API Endpunkte direkt im Browser
+  # - Automatische Generierung aus openapi.yaml
+  # 
+  # Ports:
+  # - 8082: Swagger UI Web-Interface
+  # --------------------------------------------------------------------------
+  swagger-ui:
+    image: swaggerapi/swagger-ui
+    container_name: swagger-ui-new
+    profiles:
+      - swagger                                     # Nur mit --profile swagger starten
+    
+    ports:
+      - "8082:8080"
+    
+    volumes:
+      - ./openapi.yaml:/usr/share/nginx/html/api/openapi.yaml
+    
+    environment:
+      - SWAGGER_JSON=/usr/share/nginx/html/api/openapi.yaml
+    
+    networks:
+      - dmz_network

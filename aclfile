@@ -1,0 +1,24 @@
+# ============================================
+# ACL - Access Control List
+# ============================================
+
+# test_device - Volle Rechte
+user test_device
+topic readwrite #
+
+# bridge_user - Nur Lesen f?r Sensor-Daten
+user bridge_user
+topic read sensor/#
+topic read status/+/online
+topic read lwt/+
+
+# provisioner - Provisioning Topics
+user provisioner
+topic read provisioning/request
+topic write provisioning/response
+topic read provisioning/status
+topic write provisioning/status
+
+# websocket_client - Volle Rechte f?r Dashboard
+user websocket_client
+topic readwrite #

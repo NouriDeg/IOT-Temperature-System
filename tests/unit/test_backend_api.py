@@ -96,18 +96,7 @@ class TestLatestEndpoint:
         with app.test_client() as client:
             response = client.get('/api/latest')
             assert response.status_code == 500
-
-    ################################################################        
-    
-    @patch('backend.app.psycopg2.connect')
-    def test_latest_handles_database_error(self, mock_connect):
-        from backend.app import app
-        
-        mock_connect.side_effect = Exception("DB error")
-        
-        with app.test_client() as client:
-            response = client.get('/api/latest')
-            assert response.status_code == 500
+   
 
 
 # ============================================================================

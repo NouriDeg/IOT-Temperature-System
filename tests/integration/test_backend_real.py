@@ -2,7 +2,7 @@
 import requests
 import pytest
 
-API_URL = "http://192.168.0.105:5000/api"
+API_URL = "http://192.168.0.106:5000/api"
 
 def test_health():
     response = requests.get(f"{API_URL}/health")

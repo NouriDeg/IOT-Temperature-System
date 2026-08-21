@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: provisioner
+  namespace: iot-temperature
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: provisioner
+  template:
+    metadata:
+      labels:
+        app: provisioner
+    spec:
+      containers:
+      - name: provisioner
+        image: iot-provisioner:latest
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: MQTT_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: iot-config
+              key: MQTT_HOST
+        - name: MQTT_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: iot-config
+              key: MQTT_PORT
+        - name: MQTT_PROVISION_USER
+          valueFrom:
+            configMapKeyRef:
+              name: iot-config
+              key: MQTT_PROVISION_USER
+        - name: MQTT_PROVISION_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iot-secrets
+              key: MQTT_PROVISION_PASSWORD
+        - name: DB_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: iot-config
+              key: DB_HOST
+        - name: DB_PORT
+          valueFrom:
+            configMapKeyRef:
+              name: iot-config
+              key: DB_PORT
+        - name: DB_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: iot-config
+              key: DB_NAME
+        - name: DB_USER
+          valueFrom:
+            configMapKeyRef:
+              name: iot-config
+              key: DB_USER
+        - name: DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: iot-secrets
+              key: DB_PASSWORD
+        - name: MQTT_BROKER_ADDRESS
+          valueFrom:
+            configMapKeyRef:
+              name: iot-config
+              key: MQTT_HOST
+        volumeMounts:
+        - name: certs
+          mountPath: /app/certs
+      volumes:
+      - name: certs
+        secret:
+          secretName: mosquitto-certs

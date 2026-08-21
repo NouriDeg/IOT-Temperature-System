@@ -1,0 +1,20 @@
+# ============================================================================
+# GRAFANA DASHBOARD PROVISIONING
+# ============================================================================
+# Diese Datei konfiguriert automatisches Dashboard-Loading
+# 
+# Alle JSON-Dateien im 'json' Ordner werden automatisch importiert.
+# ============================================================================
+
+apiVersion: 1
+
+providers:
+  - name: 'IoT Dashboards'                      # Name des Providers
+    orgId: 1                                    # Organisation ID
+    folder: 'IoT'                               # Ordner in Grafana
+    type: file                                  # Datei-basierter Provider
+    disableDeletion: false                      # Löschen erlaubt
+    updateIntervalSeconds: 30                   # Alle 30 Sekunden prüfen
+    allowUiUpdates: true                        # Updates über UI erlauben
+    options:
+      path: /var/lib/grafana/dashboards   # Pfad zu JSON-Dateien

@@ -76,10 +76,10 @@ DB_PASSWORD = os.getenv('DB_PASSWORD', '')                          # Datenbank 
 # ----------------------------------------------------------------------------
 # PROVISIONING KONFIGURATION
 # ----------------------------------------------------------------------------
-MQTT_BROKER_ADDRESS = os.getenv('MQTT_BROKER_ADDRESS', '192.168.0.105')  # Externe Broker Adresse
+MQTT_BROKER_ADDRESS = os.getenv('MQTT_BROKER_ADDRESS', '192.168.0.106')  # Externe Broker Adresse
 CERT_DIR = '/app/certs'                                             # Verzeichnis für CA Zertifikate
 
-# ============================================================================
+# ===========================================================================
 # 2. LOGGING KONFIGURATION
 # ============================================================================
 logging.basicConfig(
@@ -326,6 +326,17 @@ class ProvisioningService:
             firmware_version = payload.get('firmware_version', 'unknown')
 
             logger.info(f" Provisioning Request von {device_id} (MAC: {mac_address})")
+
+            # Stelle sicher dass die Datenbankverbindung sauber ist
+            # Bei jedem Request eine neue Verbindung?
+            if self.db.conn.closed:
+                self.db.connect()
+            
+            # Oder: Rollback einer fehlerhaften Transaktion
+            try:
+                self.db.conn.rollback()
+            except:
+                pass
 
             # ==========================================
             # 1. PRÜFE OB GERÄT BEREITS EXISTIERT
