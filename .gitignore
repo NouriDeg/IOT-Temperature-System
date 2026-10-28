@@ -86,6 +86,7 @@ client-python
 client-ts
 wss-demo/config.json
 passwd_file 
+K8s/secrets.yaml
 # ============================================
 # Datenbank
 # ============================================
